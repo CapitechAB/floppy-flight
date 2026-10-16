@@ -21,9 +21,14 @@ namespace FloppyFlight.Managers
         [SerializeField] private AudioSource audioSource;
         [SerializeField] private AudioSource bgmAudioSource;
         [SerializeField] private AudioClip bgmClip;
-        [SerializeField] private AudioClip flapClip;
+        [SerializeField] private AudioClip[] flapClips;
         [SerializeField] private AudioClip scoreClip;
-        [SerializeField] private AudioClip crashClip;
+        [SerializeField] private AudioClip bonkClip;
+        [SerializeField] private AudioClip gameOverClip;
+        [SerializeField] private AudioClip fightClip;
+        [SerializeField] private AudioClip fatalityClip;
+        [SerializeField] private AudioClip uhOhClip;
+        [SerializeField] private AudioClip[] announcerClips;
 
         private GameState currentState = GameState.Ready;
         private int currentScore = 0;
@@ -44,6 +49,7 @@ namespace FloppyFlight.Managers
         {
             bestScore = PlayerPrefs.GetInt("BestScore", 0);
             flightController.OnFlap += HandlePlayerFlap;
+            PrepareBgm();
             ResetGame();
         }
 
@@ -53,27 +59,33 @@ namespace FloppyFlight.Managers
             currentScore = 0;
             flightController.ResetPosition(new Vector3(0, 5.0f, 0));
             pipeSpawner.ResetPipes(-18f);
-            PlayBgm(0.45f);
+            if (bgmAudioSource) bgmAudioSource.volume = 0.38f;
         }
 
-        private void PlayBgm(float volume)
+        private void PrepareBgm()
         {
-            if (bgmAudioSource == null || bgmClip == null) return;
-            bgmAudioSource.clip = bgmClip;
+            if (bgmAudioSource == null) return;
+            if (bgmClip != null) bgmAudioSource.clip = bgmClip;
             bgmAudioSource.loop = true;
-            bgmAudioSource.volume = volume;
-            if (!bgmAudioSource.isPlaying) bgmAudioSource.Play();
+            bgmAudioSource.volume = 0.38f;
         }
 
         private void HandlePlayerFlap(bool isBoth)
         {
-            if (audioSource && flapClip) audioSource.PlayOneShot(flapClip);
+            if (audioSource && flapClips != null && flapClips.Length > 0)
+            {
+                AudioClip clip = flapClips[Random.Range(0, flapClips.Length)];
+                audioSource.pitch = Random.Range(0.95f, 1.05f);
+                audioSource.PlayOneShot(clip, 0.85f);
+            }
             if (avatarController) avatarController.TriggerWingFlap(isBoth);
 
             if (currentState == GameState.Ready)
             {
                 currentState = GameState.Flying;
                 flightController.IsFlying = true;
+                if (bgmAudioSource && !bgmAudioSource.isPlaying) bgmAudioSource.Play();
+                if (audioSource && fightClip) audioSource.PlayOneShot(fightClip, 1.0f);
             }
             else if (currentState == GameState.GameOver && gameOverCooldown <= 0)
             {
@@ -94,7 +106,18 @@ namespace FloppyFlight.Managers
         private void OnPointScored()
         {
             currentScore++;
-            if (audioSource && scoreClip) audioSource.PlayOneShot(scoreClip);
+            if (audioSource && scoreClip)
+            {
+                audioSource.pitch = 1.0f;
+                audioSource.PlayOneShot(scoreClip, 0.7f);
+            }
+
+            // Mortal Kombat Announcer ("One!", "Two!", "Excellent!", etc.)
+            if (audioSource && announcerClips != null && currentScore <= announcerClips.Length)
+            {
+                audioSource.PlayOneShot(announcerClips[currentScore - 1], 1.0f);
+            }
+
             flightController.IncreaseSpeed(0.12f);
 
             if (currentScore > bestScore)
@@ -113,13 +136,51 @@ namespace FloppyFlight.Managers
             flightController.IsFlying = false;
             gameOverCooldown = 1.0f;
 
-            if (audioSource && crashClip) audioSource.PlayOneShot(crashClip);
+            // Duck BGM
             if (bgmAudioSource) bgmAudioSource.volume = 0.15f;
+
+            // 1. Immediate cartoon bonk impact
+            if (audioSource && bonkClip)
+            {
+                audioSource.pitch = 1.0f;
+                audioSource.PlayOneShot(bonkClip, 1.0f);
+            }
+
+            // 2. Comical sad trombone Game Over fanfare
+            if (audioSource && gameOverClip)
+            {
+                StartCoroutine(PlayGameOverDelayed(0.24f));
+            }
+
+            // 3. Cheerful "Uh ooh!" on crash
+            if (audioSource && (uhOhClip != null || fatalityClip != null))
+            {
+                StartCoroutine(PlayUhOhDelayed(1.75f));
+            }
 
             // Submit score to Meta Horizon Leaderboard
             if (MetaPlatformManager.Instance != null)
             {
                 MetaPlatformManager.Instance.SubmitScore(currentScore);
+            }
+        }
+
+        private System.Collections.IEnumerator PlayGameOverDelayed(float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            if (audioSource && gameOverClip)
+            {
+                audioSource.PlayOneShot(gameOverClip, 0.95f);
+            }
+        }
+
+        private System.Collections.IEnumerator PlayUhOhDelayed(float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            AudioClip clip = uhOhClip != null ? uhOhClip : fatalityClip;
+            if (audioSource && clip)
+            {
+                audioSource.PlayOneShot(clip, 1.0f);
             }
         }
     }

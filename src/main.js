@@ -120,12 +120,13 @@ class FloppyFlightGame {
 
   resetToReady() {
     this.state = 'READY';
+    sound.isGameOver = false;
     this.score = 0;
     this.velocityY = 0;
     this.pitchAngle = 0;
     this.forwardSpeed = this.baseForwardSpeed;
     this.flapCooldown = 0;
-    sound.setBGMVolume(0.42);
+    sound.setBGMVolume(0.38);
 
     this.playerRig.position.set(0, 5.0, 0);
     this.pipeManager.reset(-18);
@@ -136,7 +137,9 @@ class FloppyFlightGame {
 
   startGame() {
     this.state = 'PLAYING';
+    sound.isGameOver = false;
     sound.startBGM();
+    sound.playFight();
     this.ui.hideReady();
   }
 
@@ -189,10 +192,15 @@ class FloppyFlightGame {
     this.state = 'GAMEOVER';
     this.gameOverDelay = 0.8; // Brief pause before allowing restart flap
 
-    sound.playCrash();
-    sound.setBGMVolume(0.22); // Duck music volume slightly on Game Over
-    this.triggerHaptic(1.0, 250);
+    sound.playBonk();
+    setTimeout(() => {
+      sound.playGameOver();
+    }, 240);
+    setTimeout(() => {
+      sound.playUhOh();
+    }, 1750);
 
+    this.triggerHaptic(1.0, 250);
     this.ui.showGameOver(this.playerRig.position);
   }
 
@@ -267,6 +275,7 @@ class FloppyFlightGame {
         this.score++;
         this.forwardSpeed = this.baseForwardSpeed + Math.min(this.score * 0.1, 4.0);
         sound.playScore();
+        sound.playAnnouncer(this.score);
         this.triggerHaptic(0.4, 60);
         this.ui.updateScore(this.score);
       });

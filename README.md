@@ -74,7 +74,7 @@ Open `unity/` in that editor with Android Build Support (SDK, NDK, OpenJDK). Pac
 | Activity | `UnityPlayerActivity` (not Game Activity) |
 | Permissions | Internet, for entitlements and leaderboards |
 
-The release scene is generated into `Assets/Scenes/Main.unity` the first time the editor or the build script runs, because the scripts shipped without a scene. OpenXR assets under `Assets/XR/` and `Packages/packages-lock.json` are also written on that first import. Commit those after a successful editor open so later builds stay reproducible. The build writes the Meta Platform mobile app id and expects a leaderboard whose API name is `floppy_highscores`.
+The release scene is generated into `Assets/Scenes/Main.unity` the first time the editor or the build script runs, because the scripts shipped without a scene. That scene wires the background track plus the flap, bonk, game-over, "Fight", "Uh ooh", and score-announcer clips under `Assets/Audio`. OpenXR assets under `Assets/XR/` and `Packages/packages-lock.json` are also written on that first import. Commit those after a successful editor open so later builds stay reproducible. The build writes the Meta Platform mobile app id and expects a leaderboard whose API name is `floppy_highscores`.
 
 ### Local signed `.aab`
 

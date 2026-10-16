@@ -9,6 +9,7 @@
     "preview": "vite preview --host"
   },
   "dependencies": {
+    "puppeteer-core": "^25.14.0",
     "three": "^0.170.0"
   },
   "devDependencies": {

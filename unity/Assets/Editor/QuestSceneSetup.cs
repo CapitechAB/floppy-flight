@@ -533,10 +533,16 @@ namespace FloppyFlight.Editor
             var bgm = systems.AddComponent<AudioSource>();
             bgm.playOnAwake = false;
             bgm.loop = true;
+            bgm.volume = 0.38f;
             bgm.spatialBlend = 0f;
-            var clip = AssetDatabase.LoadAssetAtPath<AudioClip>(BgmPath);
-            if (clip == null)
-                Debug.LogWarning("[FloppyFlight] Background music was not imported at " + BgmPath);
+            var clip = LoadClip(BgmPath);
+            bgm.clip = clip;
+
+            var announcer = new AudioClip[20];
+            for (var i = 0; i < announcer.Length; i++)
+                announcer[i] = LoadClip("Assets/Audio/Voice/voice_" + (i + 1) + ".mp3");
+
+            var uhOh = LoadClip("Assets/Audio/Voice/voice_fatality.mp3");
 
             var gameSo = new SerializedObject(game);
             SetRef(gameSo, "flightController", flight);
@@ -545,6 +551,18 @@ namespace FloppyFlight.Editor
             SetRef(gameSo, "audioSource", sfx);
             SetRef(gameSo, "bgmAudioSource", bgm);
             SetRef(gameSo, "bgmClip", clip);
+            SetClipArray(gameSo, "flapClips", new[]
+            {
+                LoadClip("Assets/Audio/SFX/flap_1.mp3"),
+                LoadClip("Assets/Audio/SFX/flap_2.mp3"),
+                LoadClip("Assets/Audio/SFX/flap_3.mp3")
+            });
+            SetRef(gameSo, "bonkClip", LoadClip("Assets/Audio/SFX/bonk.mp3"));
+            SetRef(gameSo, "gameOverClip", LoadClip("Assets/Audio/SFX/gameover.mp3"));
+            SetRef(gameSo, "fightClip", LoadClip("Assets/Audio/Voice/voice_fight.mp3"));
+            SetRef(gameSo, "uhOhClip", uhOh);
+            SetRef(gameSo, "fatalityClip", uhOh);
+            SetClipArray(gameSo, "announcerClips", announcer);
             gameSo.ApplyModifiedPropertiesWithoutUndo();
 
             var spawnerSo = new SerializedObject(spawner);
@@ -632,6 +650,24 @@ namespace FloppyFlight.Editor
             }
             prop.enumValueIndex = value;
             so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        static AudioClip LoadClip(string path)
+        {
+            var clip = AssetDatabase.LoadAssetAtPath<AudioClip>(path);
+            if (clip == null)
+                Debug.LogWarning("[FloppyFlight] Missing audio clip at " + path);
+            return clip;
+        }
+
+        static void SetClipArray(SerializedObject so, string property, AudioClip[] clips)
+        {
+            var prop = so.FindProperty(property);
+            if (prop == null || !prop.isArray)
+                throw new InvalidOperationException("Missing clip array '" + property + "' on " + so.targetObject.GetType().Name + ".");
+            prop.arraySize = clips.Length;
+            for (var i = 0; i < clips.Length; i++)
+                prop.GetArrayElementAtIndex(i).objectReferenceValue = clips[i];
         }
 
         static void SetRef(SerializedObject so, string property, UnityEngine.Object value)
