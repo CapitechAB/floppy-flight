@@ -305,13 +305,13 @@ class SoundFX {
     if (audio) {
       this.setBGMVolume(0.18);
       const isMilestone = (score % 5 === 0) || score > 20;
-      const duckDuration = isMilestone ? 1400 : 850;
+      const duckDuration = isMilestone ? 1700 : 1100;
       setTimeout(() => {
         if (!this.isGameOver) this.setBGMVolume(0.38);
       }, duckDuration);
 
       audio.currentTime = 0;
-      audio.volume = 1.0; // Booming Mortal Kombat delivery
+      audio.volume = 1.0;
       audio.play().catch(() => {});
     }
   }
@@ -324,7 +324,7 @@ class SoundFX {
       this.setBGMVolume(0.18);
       setTimeout(() => {
         if (!this.isGameOver) this.setBGMVolume(0.38);
-      }, 950);
+      }, 1250);
       audio.currentTime = 0;
       audio.volume = 1.0;
       audio.play().catch(() => {});
