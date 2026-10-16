@@ -24,60 +24,39 @@ export class BirdAvatar {
   createBeak() {
     const beakGroup = new THREE.Group();
 
-    // Material: glossy vibrant golden-orange
+    // 4-sided pyramid cone with flat faceted shading matching the user screenshot exactly
+    const beakGeom = new THREE.ConeGeometry(0.088, 0.32, 4);
+    beakGeom.rotateX(Math.PI / 2);
+    beakGeom.rotateY(Math.PI / 4);
+
     const beakMat = new THREE.MeshStandardMaterial({
-      color: 0xff793f,
-      roughness: 0.22,
-      metalness: 0.08
-    });
-
-    const lowerBeakMat = new THREE.MeshStandardMaterial({
-      color: 0xe55039,
+      color: 0xf39c12, // Rich golden cartoon yellow
       roughness: 0.28,
-      metalness: 0.05
+      metalness: 0.05,
+      flatShading: true // Crisp polygon facets: lit face on left, amber shadow face on right
     });
 
-    // 1. Upper Beak - Pointing straight FORWARD along -Z
-    // Cone apex is at (0, +height/2, 0).
-    // Rotating around X by -Math.PI / 2 swings the apex from +Y to -Z (FORWARD!)
-    const upperGeom = new THREE.ConeGeometry(0.075, 0.32, 4);
-    upperGeom.rotateX(-Math.PI / 2); // APEX POINTS FORWARD ALONG -Z
-    upperGeom.rotateY(Math.PI / 4);  // Distinct dorsal ridge on top
-    upperGeom.scale(1.1, 0.72, 1.0);
+    const beakMesh = new THREE.Mesh(beakGeom, beakMat);
+    beakMesh.scale.set(1.15, 0.75, 1.3);
+    beakMesh.castShadow = true;
+    beakGroup.add(beakMesh);
 
-    const upperBeak = new THREE.Mesh(upperGeom, beakMat);
-    upperBeak.position.set(0, 0.015, -0.16); // Centered so base is at head, tip reaches forward to -0.32
-    upperBeak.castShadow = true;
-    beakGroup.add(upperBeak);
-
-    // 2. Lower Mandible - Slightly smaller, nestled underneath
-    const lowerGeom = new THREE.ConeGeometry(0.065, 0.28, 4);
-    lowerGeom.rotateX(-Math.PI / 2); // APEX POINTS FORWARD ALONG -Z
-    lowerGeom.rotateY(Math.PI / 4);
-    lowerGeom.scale(1.0, 0.55, 1.0);
-
-    const lowerBeak = new THREE.Mesh(lowerGeom, lowerBeakMat);
-    lowerBeak.position.set(0, -0.02, -0.14);
-    lowerBeak.castShadow = true;
-    beakGroup.add(lowerBeak);
-
-    // 3. Nostrils on upper dorsal ridge near the base (close to face)
-    const nostrilMat = new THREE.MeshBasicMaterial({ color: 0x87291a });
+    // Subtle nostril dots on the upper dorsal ridge
+    const nostrilMat = new THREE.MeshBasicMaterial({ color: 0x8e2c00 });
     const nostrilGeom = new THREE.SphereGeometry(0.007, 6, 6);
-    nostrilGeom.scale(0.8, 1.4, 1.8);
+    nostrilGeom.scale(0.8, 1.4, 1.6);
 
     const leftNostril = new THREE.Mesh(nostrilGeom, nostrilMat);
-    leftNostril.position.set(-0.022, 0.038, -0.06);
+    leftNostril.position.set(-0.024, 0.032, -0.06);
     beakGroup.add(leftNostril);
 
     const rightNostril = new THREE.Mesh(nostrilGeom, nostrilMat);
-    rightNostril.position.set(0.022, 0.038, -0.06);
+    rightNostril.position.set(0.024, 0.032, -0.06);
     beakGroup.add(rightNostril);
 
-    // Position beak right in front of bird's head/eyes:
-    // Base sits just below eyes at y = -0.14, z = -0.18, tip points straight forward to z = -0.50!
-    beakGroup.position.set(0, -0.14, -0.18);
-    beakGroup.rotation.x = THREE.MathUtils.degToRad(-3.0); // Natural forward line of sight
+    // Positioned in lower view pointing forward/up toward the horizon
+    beakGroup.position.set(0, -0.15, -0.32);
+    beakGroup.rotation.x = THREE.MathUtils.degToRad(-10);
 
     this.camera.add(beakGroup);
     this.beakMesh = beakGroup;
@@ -131,15 +110,14 @@ export class BirdAvatar {
       const mat = (i === 0) ? featherCyanMat : (i === 1 ? featherWhiteMat : (i === 2 ? featherGlowMat : featherWhiteMat));
       const feather = new THREE.Mesh(featherGeom, mat);
 
-      // Fan outward along X and sweep back slightly along Z
       const spreadAngle = (isLeft ? 1 : -1) * (0.12 + i * 0.24);
       feather.position.set(
         (isLeft ? -1 : 1) * (0.10 + i * 0.07),
         -i * 0.024,
-        -i * 0.038 // Swept backward for flight aerodynamics
+        -i * 0.038
       );
       feather.rotation.z = spreadAngle;
-      feather.rotation.y = (isLeft ? -1 : 1) * 0.15; // Sleek backward rake
+      feather.rotation.y = (isLeft ? -1 : 1) * 0.15;
       feather.castShadow = true;
       wingPivot.add(feather);
     }
@@ -174,7 +152,7 @@ export class BirdAvatar {
     this.leftWing = this.createWingMesh(true);
     this.rightWing = this.createWingMesh(false);
 
-    // Natural grip offset on VR Touch Plus controllers (sprouting from outer wrist/back of hand)
+    // Natural grip offset on VR Touch Plus controllers
     this.leftWing.position.set(-0.06, 0.02, 0.04);
     this.rightWing.position.set(0.06, 0.02, 0.04);
 
@@ -203,25 +181,21 @@ export class BirdAvatar {
   }
 
   update(delta, birdPitchAngle, isPresenting = false, controllerVelocities = [0, 0]) {
-    // Show controller wings in VR, camera wings on desktop
     if (this.camWingLeft) this.camWingLeft.visible = !isPresenting;
     if (this.camWingRight) this.camWingRight.visible = !isPresenting;
 
-    // Beak subtle pitch response with head bobbing
+    // Beak pitch response with head bobbing
     if (this.beakMesh) {
-      this.beakMesh.rotation.x = THREE.MathUtils.degToRad(-3.0) + (birdPitchAngle * 0.18);
+      this.beakMesh.rotation.x = THREE.MathUtils.degToRad(-10) + (birdPitchAngle * 0.22);
     }
 
-    // 1. Aerodynamic Flex responding dynamically to controller velocity (Vy)
-    // Moving hand DOWN (vy < 0) flexes wing UP against air resistance
-    // Lifting hand UP (vy > 0) trails wing downward
+    // Aerodynamic flex responding dynamically to controller velocity
     const targetLeftFlex = THREE.MathUtils.clamp(-controllerVelocities[0] * 0.22, -0.45, 0.55);
     const targetRightFlex = THREE.MathUtils.clamp(-controllerVelocities[1] * 0.22, -0.45, 0.55);
 
     this.leftFlex = THREE.MathUtils.lerp(this.leftFlex, targetLeftFlex, delta * 12.0);
     this.rightFlex = THREE.MathUtils.lerp(this.rightFlex, targetRightFlex, delta * 12.0);
 
-    // 2. Additive flap impulse animation
     if (this.leftFlapAnim > 0) {
       this.leftFlapAnim = Math.max(0, this.leftFlapAnim - delta * 4.2);
     }
@@ -232,7 +206,7 @@ export class BirdAvatar {
     const leftFlapStroke = Math.sin(this.leftFlapAnim * Math.PI) * 0.55;
     const rightFlapStroke = Math.sin(this.rightFlapAnim * Math.PI) * 0.55;
 
-    // Apply ONLY to internal wingPivot so controller's 6DoF rotation remains 100% free!
+    // Apply ONLY to internal wingPivot so controller's 6DoF rotation remains 100% free
     if (this.leftWing && this.leftWing.userData.wingPivot) {
       const pivot = this.leftWing.userData.wingPivot;
       pivot.rotation.z = (this.leftFlex + leftFlapStroke) * 0.6;
