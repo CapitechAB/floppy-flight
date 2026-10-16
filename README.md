@@ -50,3 +50,84 @@ To make it accessible worldwide without local Wi-Fi:
 1. Push this repository to GitHub.
 2. Enable GitHub Pages in the repository settings (or use GitHub Actions).
 3. Open `https://<your-username>.github.io/floppy-flight/` in the Quest Browser!
+
+---
+
+## 📦 Unity project for the Horizon Store
+
+The installable Quest app lives in [`unity/`](unity/). It targets **Unity 6.0 LTS `6000.0.83f1`** (the newest 6000.0 patch that already has a GameCI Android editor image; Meta XR SDK 207 requires `6000.0.66f2` or newer). `ProjectSettings/` and `Packages/` were not in the repository, so this project was created around the existing C# scripts.
+
+Open `unity/` in that editor with Android Build Support (SDK, NDK, OpenJDK). Package Manager installs **Meta XR All-in-One SDK** `com.meta.xr.sdk.all` **207.0.1** from `Packages/manifest.json`, plus OpenXR. The heavy Meta packages are resolved from `https://npm.developer.oculus.com`. The small All-in-One wrapper is resolved from Unity's registry. If Unity reports that the account has not acquired the All-in-One package, add [Meta XR All-in-One SDK](https://assetstore.unity.com/packages/tools/integration/meta-xr-all-in-one-sdk-269657) to the same Unity account used for the license, then reopen the project.
+
+`Assets/Editor/BuildScript.cs` runs on editor load and again before every release build. It sets the Horizon Store player configuration and enables OpenXR:
+
+| Setting | Value |
+| :--- | :--- |
+| Company / product | Capitech AB / Floppy Flight |
+| Package name | `com.capitechab.floppyflight` |
+| Version | `1.0.0` (version code from `ANDROID_VERSION_CODE`, or the GitHub run number in CI) |
+| Scripting backend | IL2CPP, ARM64 only |
+| Min / target API | 32 / 34 (Android 14). New Horizon apps created after 1 March 2026 must target API 34. |
+| Graphics | Vulkan only, linear color space, multithreaded rendering |
+| XR | OpenXR loader, Meta Quest Support, Single Pass Instanced (Vulkan multiview), symmetric projection |
+| Devices | Quest 2, Quest Pro, Quest 3, Quest 3S |
+| Activity | `UnityPlayerActivity` (not Game Activity) |
+| Permissions | Internet, for entitlements and leaderboards |
+
+The release scene is generated into `Assets/Scenes/Main.unity` the first time the editor or the build script runs, because the scripts shipped without a scene. OpenXR assets under `Assets/XR/` and `Packages/packages-lock.json` are also written on that first import. Commit those after a successful editor open so later builds stay reproducible. The build writes the Meta Platform mobile app id and expects a leaderboard whose API name is `floppy_highscores`.
+
+### Local signed `.aab`
+
+Do not commit a keystore or a password. From a shell that has an activated Unity 6000.0.83f1 editor:
+
+```bash
+export ANDROID_KEYSTORE_PATH=/path/to/upload.keystore
+export ANDROID_KEYSTORE_PASS='...'
+export ANDROID_KEYALIAS_NAME='upload'
+export ANDROID_KEYALIAS_PASS='...'
+export META_APP_ID='0000000000000000'
+
+Unity -batchmode -nographics -quit \
+  -projectPath unity \
+  -executeMethod FloppyFlight.Editor.BuildScript.BuildAndroidAab \
+  -logFile -
+```
+
+`ANDROID_KEYSTORE_BASE64` can be used instead of a path. The `.aab` is written to `unity/Builds/FloppyFlight.aab` unless `-customBuildPath` or `AAB_OUTPUT` is set. Passwords are cleared from Player Settings after the build.
+
+### GitHub Actions
+
+[`.github/workflows/quest-release-aab.yml`](.github/workflows/quest-release-aab.yml) uses `game-ci/unity-builder@v4` to build the signed `.aab` and upload it as the `FloppyFlight-Quest-release` artifact. Run it from the Actions tab, or by pushing a change under `unity/`.
+
+Create these **repository secrets** before the first run ([GameCI license activation](https://game.ci/docs/github/activation)):
+
+| Secret | What to put in it |
+| :--- | :--- |
+| `UNITY_LICENSE` | Unity Personal license file (`.ulf`) contents |
+| `UNITY_EMAIL` | Unity account email. The account must own the Meta XR All-in-One SDK entitlement if the wrapper package asks for one. |
+| `UNITY_PASSWORD` | Unity account password. Use letters and digits only; GameCI has trouble with symbols. |
+| `ANDROID_KEYSTORE_BASE64` | `base64 -w 0 upload.keystore` |
+| `ANDROID_KEYSTORE_PASS` | Keystore password |
+| `ANDROID_KEYALIAS_NAME` | Key alias |
+| `ANDROID_KEYALIAS_PASS` | Key alias password |
+| `META_APP_ID` | Quest app id from the [Meta Horizon Developer Dashboard](https://developers.meta.com/horizon/manage/). The entitlement check quits the app when this is missing or the user does not own the app. |
+
+Also create a leaderboard in that dashboard whose API name is exactly `floppy_highscores`.
+
+This environment does not have Unity installed and does not have those secrets, so a signed `.aab` cannot be produced here. The workflow is what produces it once the secrets exist.
+
+### Store listing assets
+
+Draft art generated from the game's sunset, pipe, beak, and wing palette is in [`StoreAssets/`](StoreAssets/):
+
+- `icon-512.png` — 512×512, 24-bit PNG, square corners, no transparency
+- `banner-2560x1440.png` — cover landscape, 2560×1440, 24-bit PNG, title spelled **Floppy Flight**
+
+These are drafts for the dashboard, not a finished marketing pass.
+
+Still required before submission, and **not** in the repo:
+
+- **5 unique screenshots**, each 2560×1440, 16:9, 24-bit PNG, captured from the Quest build's point of view. No marketing banners, badges, or other-platform headsets. Suggested set: approaching a vine-covered pipe gap with the golden beak in view; flying through a spinning golden ring; a near miss; a wider sunset vista with islands and a windmill; a later pipe after the score has climbed. `gameplay.mp4` / `gameplay.gif` are 1280×720 browser captures with title-screen text, so they cannot be submitted as this screenshot set.
+- Cover square 1440×1440, cover portrait 1008×1440, and hero cover 3000×900 if the dashboard asks for them.
+- **Pricing** is chosen in the Horizon Developer Dashboard (free or a paid tier). Nothing in the project sets a price. The build has no in-app purchases.
+- A short MP4 trailer is optional. Minimum 1080p, maximum 2K.

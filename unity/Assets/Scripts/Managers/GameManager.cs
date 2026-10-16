@@ -30,6 +30,10 @@ namespace FloppyFlight.Managers
         private int bestScore = 0;
         private float gameOverCooldown = 0f;
 
+        public int Score => currentScore;
+        public int Best => bestScore;
+        public GameState State => currentState;
+
         void Awake()
         {
             if (Instance == null) Instance = this;
@@ -49,6 +53,16 @@ namespace FloppyFlight.Managers
             currentScore = 0;
             flightController.ResetPosition(new Vector3(0, 5.0f, 0));
             pipeSpawner.ResetPipes(-18f);
+            PlayBgm(0.45f);
+        }
+
+        private void PlayBgm(float volume)
+        {
+            if (bgmAudioSource == null || bgmClip == null) return;
+            bgmAudioSource.clip = bgmClip;
+            bgmAudioSource.loop = true;
+            bgmAudioSource.volume = volume;
+            if (!bgmAudioSource.isPlaying) bgmAudioSource.Play();
         }
 
         private void HandlePlayerFlap(bool isBoth)
@@ -100,6 +114,7 @@ namespace FloppyFlight.Managers
             gameOverCooldown = 1.0f;
 
             if (audioSource && crashClip) audioSource.PlayOneShot(crashClip);
+            if (bgmAudioSource) bgmAudioSource.volume = 0.15f;
 
             // Submit score to Meta Horizon Leaderboard
             if (MetaPlatformManager.Instance != null)
