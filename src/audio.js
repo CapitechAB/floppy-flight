@@ -1,6 +1,9 @@
 import bgmUrl from './assets/bgm.mp3';
 
-// Web Audio API Procedural Sound Synthesizer + Background Music Player
+// Eager load all bird announcer voice clips
+const voiceModules = import.meta.glob('./assets/voice/*.mp3', { eager: true, import: 'default' });
+
+// Web Audio API Procedural Sound Synthesizer + BGM + Hyped Bird Announcer
 class SoundFX {
   constructor() {
     this.ctx = null;
@@ -9,8 +12,20 @@ class SoundFX {
     // Background Music Player
     this.bgm = new Audio(bgmUrl);
     this.bgm.loop = true;
-    this.bgm.volume = 0.42; // Balanced so whooshes and chimes pop through
+    this.bgm.volume = 0.38; // Balanced so announcer cuts through clearly
     this.bgmStarted = false;
+
+    // Preload Hyped Bird Announcer Voice Clips
+    this.voiceClips = {};
+    for (const [pathKey, url] of Object.entries(voiceModules)) {
+      const match = pathKey.match(/voice_(.*)\.mp3$/);
+      if (match) {
+        const key = match[1];
+        const audio = new Audio(url);
+        audio.preload = 'auto';
+        this.voiceClips[key] = audio;
+      }
+    }
   }
 
   init() {
@@ -50,6 +65,33 @@ class SoundFX {
   setBGMVolume(vol) {
     if (this.bgm) {
       this.bgm.volume = vol;
+    }
+  }
+
+  // Hyped Bird-Caster Announcer Voice ("One!", "Two!", etc.)
+  playAnnouncer(score) {
+    if (this.isMuted) return;
+    this.init();
+
+    let clipKey = `${score}`;
+
+    // For scores above 20 without a dedicated number clip, pick special combo hype calls
+    if (!this.voiceClips[clipKey]) {
+      const combos = ['combo1', 'combo2', 'combo3', `${((score - 1) % 10) + 1}`];
+      clipKey = combos[Math.floor(Math.random() * combos.length)];
+    }
+
+    const audio = this.voiceClips[clipKey];
+    if (audio) {
+      // Slightly duck BGM for 0.7s so the hype voice pierces through cleanly
+      this.setBGMVolume(0.20);
+      setTimeout(() => {
+        if (!this.isGameOver) this.setBGMVolume(0.38);
+      }, 700);
+
+      audio.currentTime = 0;
+      audio.volume = 0.95; // Loud & hyped sports announcer!
+      audio.play().catch(() => {});
     }
   }
 

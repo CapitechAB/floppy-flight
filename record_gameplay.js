@@ -193,8 +193,12 @@ async function run() {
   const gifPath = path.join(__dirname, 'gameplay.gif');
 
   const bgmPath = path.join(__dirname, 'src', 'assets', 'bgm.mp3');
-  console.log('Converting WebM to MP4 with background music track...');
-  execSync(`ffmpeg -y -i "${webmPath}" -i "${bgmPath}" -c:v libx264 -pix_fmt yuv420p -r 30 -c:a aac -b:a 192k -shortest "${mp4Path}"`, { stdio: 'inherit' });
+  const v1 = path.join(__dirname, 'src', 'assets', 'voice', 'voice_1.mp3');
+  const v2 = path.join(__dirname, 'src', 'assets', 'voice', 'voice_2.mp3');
+  const v3 = path.join(__dirname, 'src', 'assets', 'voice', 'voice_3.mp3');
+
+  console.log('Converting WebM to MP4 with BGM and bird announcer voices...');
+  execSync(`ffmpeg -y -i "${webmPath}" -i "${bgmPath}" -i "${v1}" -i "${v2}" -i "${v3}" -filter_complex "[1:a]volume=0.35[bgm];[2:a]adelay=4200|4200,volume=1.2[v1];[3:a]adelay=6800|6800,volume=1.2[v2];[4:a]adelay=9400|9400,volume=1.2[v3];[bgm][v1][v2][v3]amix=inputs=4:duration=first:dropout_transition=2[aout]" -map 0:v -map "[aout]" -c:v libx264 -pix_fmt yuv420p -r 30 -c:a aac -b:a 192k -shortest "${mp4Path}"`, { stdio: 'inherit' });
 
   console.log('Generating high-quality animated GIF with ffmpeg...');
   execSync(`ffmpeg -y -i "${mp4Path}" -vf "fps=15,scale=640:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" "${gifPath}"`, { stdio: 'inherit' });

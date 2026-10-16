@@ -267,6 +267,7 @@ class FloppyFlightGame {
         this.score++;
         this.forwardSpeed = this.baseForwardSpeed + Math.min(this.score * 0.1, 4.0);
         sound.playScore();
+        sound.playAnnouncer(this.score);
         this.triggerHaptic(0.4, 60);
         this.ui.updateScore(this.score);
       });
