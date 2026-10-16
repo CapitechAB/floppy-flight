@@ -9,11 +9,13 @@ export class BirdAvatar {
     this.beakMesh = null;
     this.leftWing = null;
     this.rightWing = null;
-    this.leftTrail = null;
-    this.rightTrail = null;
+    this.camWingLeft = null;
+    this.camWingRight = null;
 
     this.leftFlapAnim = 0;
     this.rightFlapAnim = 0;
+    this.leftFlex = 0;
+    this.rightFlex = 0;
 
     this.createBeak();
     this.createWings();
@@ -22,45 +24,74 @@ export class BirdAvatar {
   createBeak() {
     const beakGroup = new THREE.Group();
 
-    // Upper beak - glossy golden orange
-    const upperGeom = new THREE.ConeGeometry(0.08, 0.28, 4);
-    upperGeom.rotateX(Math.PI / 2);
-    upperGeom.rotateY(Math.PI / 4);
-
+    // Material: glossy vibrant golden-orange
     const beakMat = new THREE.MeshStandardMaterial({
       color: 0xff793f,
-      roughness: 0.25,
-      metalness: 0.1
+      roughness: 0.22,
+      metalness: 0.08
     });
 
+    const lowerBeakMat = new THREE.MeshStandardMaterial({
+      color: 0xe55039,
+      roughness: 0.28,
+      metalness: 0.05
+    });
+
+    // 1. Upper Beak - Pointing straight FORWARD along -Z
+    // Cone apex is at (0, +height/2, 0).
+    // Rotating around X by -Math.PI / 2 swings the apex from +Y to -Z (FORWARD!)
+    const upperGeom = new THREE.ConeGeometry(0.075, 0.32, 4);
+    upperGeom.rotateX(-Math.PI / 2); // APEX POINTS FORWARD ALONG -Z
+    upperGeom.rotateY(Math.PI / 4);  // Distinct dorsal ridge on top
+    upperGeom.scale(1.1, 0.72, 1.0);
+
     const upperBeak = new THREE.Mesh(upperGeom, beakMat);
-    upperBeak.scale.set(1.1, 0.72, 1.25);
+    upperBeak.position.set(0, 0.015, -0.16); // Centered so base is at head, tip reaches forward to -0.32
     upperBeak.castShadow = true;
     beakGroup.add(upperBeak);
 
-    // Beak edge / nostril details
-    const nostrilMat = new THREE.MeshBasicMaterial({ color: 0xcd6133 });
+    // 2. Lower Mandible - Slightly smaller, nestled underneath
+    const lowerGeom = new THREE.ConeGeometry(0.065, 0.28, 4);
+    lowerGeom.rotateX(-Math.PI / 2); // APEX POINTS FORWARD ALONG -Z
+    lowerGeom.rotateY(Math.PI / 4);
+    lowerGeom.scale(1.0, 0.55, 1.0);
+
+    const lowerBeak = new THREE.Mesh(lowerGeom, lowerBeakMat);
+    lowerBeak.position.set(0, -0.02, -0.14);
+    lowerBeak.castShadow = true;
+    beakGroup.add(lowerBeak);
+
+    // 3. Nostrils on upper dorsal ridge near the base (close to face)
+    const nostrilMat = new THREE.MeshBasicMaterial({ color: 0x87291a });
     const nostrilGeom = new THREE.SphereGeometry(0.007, 6, 6);
+    nostrilGeom.scale(0.8, 1.4, 1.8);
 
     const leftNostril = new THREE.Mesh(nostrilGeom, nostrilMat);
-    leftNostril.position.set(-0.02, 0.024, -0.05);
+    leftNostril.position.set(-0.022, 0.038, -0.06);
     beakGroup.add(leftNostril);
 
     const rightNostril = new THREE.Mesh(nostrilGeom, nostrilMat);
-    rightNostril.position.set(0.02, 0.024, -0.05);
+    rightNostril.position.set(0.022, 0.038, -0.06);
     beakGroup.add(rightNostril);
 
-    beakGroup.position.set(0, -0.15, -0.32);
-    beakGroup.rotation.x = THREE.MathUtils.degToRad(-10);
+    // Position beak right in front of bird's head/eyes:
+    // Base sits just below eyes at y = -0.14, z = -0.18, tip points straight forward to z = -0.50!
+    beakGroup.position.set(0, -0.14, -0.18);
+    beakGroup.rotation.x = THREE.MathUtils.degToRad(-3.0); // Natural forward line of sight
 
     this.camera.add(beakGroup);
     this.beakMesh = beakGroup;
   }
 
   createWingMesh(isLeft) {
-    const wingGroup = new THREE.Group();
+    // Root group follows controller 6DoF position and rotation 1:1
+    const wingRoot = new THREE.Group();
 
-    // Ethereal white and soft cyan materials matching the artwork
+    // Internal pivot for aerodynamic flex and flap bends without hijacking controller rotation
+    const wingPivot = new THREE.Group();
+    wingRoot.add(wingPivot);
+
+    // Ethereal white and cyan feathers matching concept art
     const featherWhiteMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       roughness: 0.25,
@@ -83,42 +114,44 @@ export class BirdAvatar {
       color: 0xffffff,
       roughness: 0.2,
       emissive: 0xfffa65,
-      emissiveIntensity: 0.3,
+      emissiveIntensity: 0.35,
       side: THREE.DoubleSide
     });
 
-    // 5 stylized fanning feathers
+    // 5 stylized layered feathers fanning out from the hand
     const featherCount = 5;
     for (let i = 0; i < featherCount; i++) {
-      const length = 0.32 - i * 0.035;
-      const width = 0.085 - i * 0.008;
+      const length = 0.36 - i * 0.04;
+      const width = 0.09 - i * 0.008;
 
       const featherGeom = new THREE.ConeGeometry(width, length, 4);
       featherGeom.rotateZ(isLeft ? Math.PI / 2 : -Math.PI / 2);
-      featherGeom.scale(1.2, 0.3, 1.0);
+      featherGeom.scale(1.2, 0.28, 1.0);
 
       const mat = (i === 0) ? featherCyanMat : (i === 1 ? featherWhiteMat : (i === 2 ? featherGlowMat : featherWhiteMat));
       const feather = new THREE.Mesh(featherGeom, mat);
 
-      const spreadAngle = (isLeft ? 1 : -1) * (0.15 + i * 0.22);
+      // Fan outward along X and sweep back slightly along Z
+      const spreadAngle = (isLeft ? 1 : -1) * (0.12 + i * 0.24);
       feather.position.set(
-        (isLeft ? -1 : 1) * (0.09 + i * 0.065),
-        -i * 0.028,
-        -i * 0.032
+        (isLeft ? -1 : 1) * (0.10 + i * 0.07),
+        -i * 0.024,
+        -i * 0.038 // Swept backward for flight aerodynamics
       );
       feather.rotation.z = spreadAngle;
+      feather.rotation.y = (isLeft ? -1 : 1) * 0.15; // Sleek backward rake
       feather.castShadow = true;
-      wingGroup.add(feather);
+      wingPivot.add(feather);
     }
 
-    // Wing shoulder hub (touch controller attachment)
+    // Wing wrist anchor hub
     const baseGeom = new THREE.SphereGeometry(0.055, 10, 10);
     baseGeom.scale(1.3, 0.85, 1.4);
     const baseMesh = new THREE.Mesh(baseGeom, featherWhiteMat);
-    wingGroup.add(baseMesh);
+    wingPivot.add(baseMesh);
 
-    // Wind swoosh streak trail (curved speed arc matching artwork)
-    const trailGeom = new THREE.TorusGeometry(0.24, 0.025, 8, 24, Math.PI * 0.95);
+    // Dynamic wind swoosh streak ribbon
+    const trailGeom = new THREE.TorusGeometry(0.26, 0.028, 8, 24, Math.PI * 0.95);
     const trailMat = new THREE.MeshBasicMaterial({
       color: 0x22d3ee,
       transparent: true,
@@ -130,30 +163,34 @@ export class BirdAvatar {
     const trailMesh = new THREE.Mesh(trailGeom, trailMat);
     trailMesh.rotation.x = Math.PI / 2;
     trailMesh.rotation.y = isLeft ? 0.3 : -0.3;
-    trailMesh.position.set(isLeft ? -0.15 : 0.15, -0.05, 0.05);
-    wingGroup.add(trailMesh);
-    wingGroup.userData = { trailMesh };
+    trailMesh.position.set(isLeft ? -0.16 : 0.16, -0.05, 0.05);
+    wingPivot.add(trailMesh);
 
-    return wingGroup;
+    wingRoot.userData = { wingPivot, trailMesh };
+    return wingRoot;
   }
 
   createWings() {
     this.leftWing = this.createWingMesh(true);
     this.rightWing = this.createWingMesh(false);
 
-    // Desktop view camera wings
+    // Natural grip offset on VR Touch Plus controllers (sprouting from outer wrist/back of hand)
+    this.leftWing.position.set(-0.06, 0.02, 0.04);
+    this.rightWing.position.set(0.06, 0.02, 0.04);
+
+    if (this.controller0) this.controller0.add(this.leftWing);
+    if (this.controller1) this.controller1.add(this.rightWing);
+
+    // Desktop camera preview wings
     this.camWingLeft = this.createWingMesh(true);
     this.camWingRight = this.createWingMesh(false);
-    this.camWingLeft.position.set(-0.36, -0.16, -0.48);
+    this.camWingLeft.position.set(-0.38, -0.14, -0.46);
     this.camWingLeft.scale.set(1.35, 1.35, 1.35);
-    this.camWingRight.position.set(0.36, -0.16, -0.48);
+    this.camWingRight.position.set(0.38, -0.14, -0.46);
     this.camWingRight.scale.set(1.35, 1.35, 1.35);
 
     this.camera.add(this.camWingLeft);
     this.camera.add(this.camWingRight);
-
-    if (this.controller0) this.controller0.add(this.leftWing);
-    if (this.controller1) this.controller1.add(this.rightWing);
   }
 
   triggerFlapVisual(side) {
@@ -165,56 +202,68 @@ export class BirdAvatar {
     }
   }
 
-  update(delta, birdPitchAngle, isPresenting = false) {
+  update(delta, birdPitchAngle, isPresenting = false, controllerVelocities = [0, 0]) {
+    // Show controller wings in VR, camera wings on desktop
     if (this.camWingLeft) this.camWingLeft.visible = !isPresenting;
     if (this.camWingRight) this.camWingRight.visible = !isPresenting;
 
+    // Beak subtle pitch response with head bobbing
     if (this.beakMesh) {
-      this.beakMesh.rotation.x = THREE.MathUtils.degToRad(-10) + (birdPitchAngle * 0.25);
+      this.beakMesh.rotation.x = THREE.MathUtils.degToRad(-3.0) + (birdPitchAngle * 0.18);
     }
 
-    // Left flap bend and wind trail glow
+    // 1. Aerodynamic Flex responding dynamically to controller velocity (Vy)
+    // Moving hand DOWN (vy < 0) flexes wing UP against air resistance
+    // Lifting hand UP (vy > 0) trails wing downward
+    const targetLeftFlex = THREE.MathUtils.clamp(-controllerVelocities[0] * 0.22, -0.45, 0.55);
+    const targetRightFlex = THREE.MathUtils.clamp(-controllerVelocities[1] * 0.22, -0.45, 0.55);
+
+    this.leftFlex = THREE.MathUtils.lerp(this.leftFlex, targetLeftFlex, delta * 12.0);
+    this.rightFlex = THREE.MathUtils.lerp(this.rightFlex, targetRightFlex, delta * 12.0);
+
+    // 2. Additive flap impulse animation
     if (this.leftFlapAnim > 0) {
       this.leftFlapAnim = Math.max(0, this.leftFlapAnim - delta * 4.2);
-      const bend = Math.sin(this.leftFlapAnim * Math.PI) * 0.52;
-      const glowOpacity = Math.sin(this.leftFlapAnim * Math.PI) * 0.85;
+    }
+    if (this.rightFlapAnim > 0) {
+      this.rightFlapAnim = Math.max(0, this.rightFlapAnim - delta * 4.2);
+    }
 
-      if (this.leftWing) {
-        this.leftWing.rotation.x = -bend;
-        this.leftWing.rotation.z = -bend * 0.5;
-        if (this.leftWing.userData.trailMesh) {
-          this.leftWing.userData.trailMesh.material.opacity = glowOpacity;
-        }
-      }
-      if (this.camWingLeft) {
-        this.camWingLeft.rotation.x = -bend;
-        this.camWingLeft.rotation.z = -bend * 0.5;
-        if (this.camWingLeft.userData.trailMesh) {
-          this.camWingLeft.userData.trailMesh.material.opacity = glowOpacity;
-        }
+    const leftFlapStroke = Math.sin(this.leftFlapAnim * Math.PI) * 0.55;
+    const rightFlapStroke = Math.sin(this.rightFlapAnim * Math.PI) * 0.55;
+
+    // Apply ONLY to internal wingPivot so controller's 6DoF rotation remains 100% free!
+    if (this.leftWing && this.leftWing.userData.wingPivot) {
+      const pivot = this.leftWing.userData.wingPivot;
+      pivot.rotation.z = (this.leftFlex + leftFlapStroke) * 0.6;
+      pivot.rotation.x = -(this.leftFlex + leftFlapStroke) * 0.4;
+
+      if (this.leftWing.userData.trailMesh) {
+        this.leftWing.userData.trailMesh.material.opacity = Math.max(0.2, Math.sin(this.leftFlapAnim * Math.PI) * 0.9);
       }
     }
 
-    // Right flap bend and wind trail glow
-    if (this.rightFlapAnim > 0) {
-      this.rightFlapAnim = Math.max(0, this.rightFlapAnim - delta * 4.2);
-      const bend = Math.sin(this.rightFlapAnim * Math.PI) * 0.52;
-      const glowOpacity = Math.sin(this.rightFlapAnim * Math.PI) * 0.85;
+    if (this.rightWing && this.rightWing.userData.wingPivot) {
+      const pivot = this.rightWing.userData.wingPivot;
+      pivot.rotation.z = -(this.rightFlex + rightFlapStroke) * 0.6;
+      pivot.rotation.x = -(this.rightFlex + rightFlapStroke) * 0.4;
 
-      if (this.rightWing) {
-        this.rightWing.rotation.x = -bend;
-        this.rightWing.rotation.z = bend * 0.5;
-        if (this.rightWing.userData.trailMesh) {
-          this.rightWing.userData.trailMesh.material.opacity = glowOpacity;
-        }
+      if (this.rightWing.userData.trailMesh) {
+        this.rightWing.userData.trailMesh.material.opacity = Math.max(0.2, Math.sin(this.rightFlapAnim * Math.PI) * 0.9);
       }
-      if (this.camWingRight) {
-        this.camWingRight.rotation.x = -bend;
-        this.camWingRight.rotation.z = bend * 0.5;
-        if (this.camWingRight.userData.trailMesh) {
-          this.camWingRight.userData.trailMesh.material.opacity = glowOpacity;
-        }
-      }
+    }
+
+    // Desktop wings animation
+    if (this.camWingLeft && this.camWingLeft.userData.wingPivot) {
+      const pivot = this.camWingLeft.userData.wingPivot;
+      pivot.rotation.z = leftFlapStroke * 0.75;
+      pivot.rotation.x = -leftFlapStroke * 0.5;
+    }
+
+    if (this.camWingRight && this.camWingRight.userData.wingPivot) {
+      const pivot = this.camWingRight.userData.wingPivot;
+      pivot.rotation.z = -rightFlapStroke * 0.75;
+      pivot.rotation.x = -rightFlapStroke * 0.5;
     }
   }
 }
