@@ -33,7 +33,7 @@ export class UIManager {
   createScoreDisplay() {
     const { texture, canvas, ctx } = this.createCanvasTexture((c, w, h) => {
       this.drawScoreCanvas(c, w, h, 0);
-    }, 256, 128);
+    }, 384, 160);
 
     this.scoreCanvas = canvas;
     this.scoreCtx = ctx;
@@ -46,35 +46,65 @@ export class UIManager {
       depthWrite: false
     });
 
-    const geom = new THREE.PlaneGeometry(1.2, 0.6);
+    const geom = new THREE.PlaneGeometry(1.4, 0.6);
     this.scoreMesh = new THREE.Mesh(geom, mat);
     this.scoreMesh.renderOrder = 999;
-    this.scoreMesh.position.set(0, 1.3, -3.2);
+    this.scoreMesh.position.set(0, 1.35, -3.2);
 
-    // Attached to camera so it stays in upper peripheral view
     this.camera.add(this.scoreMesh);
   }
 
   drawScoreCanvas(ctx, w, h, score) {
     ctx.clearRect(0, 0, w, h);
 
-    // Pill background
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    // Rounded glowing arcade score badge matching reference art
+    ctx.fillStyle = 'rgba(10, 15, 30, 0.65)';
     ctx.beginPath();
-    ctx.roundRect(20, 20, w - 40, h - 40, 24);
+    ctx.roundRect(16, 16, w - 32, h - 32, 28);
     ctx.fill();
 
-    // White border
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 4;
+    // Golden-orange border
+    ctx.strokeStyle = '#ffa502';
+    ctx.lineWidth = 5;
     ctx.stroke();
 
-    // Score text with drop shadow
-    ctx.font = 'bold 54px Arial, sans-serif';
+    // VR label tag
+    ctx.fillStyle = '#0984e3';
+    ctx.beginPath();
+    ctx.roundRect(32, 28, 60, 32, 10);
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.font = 'bold 20px "Arial Black", Impact, sans-serif';
+    ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fbc531';
-    ctx.fillText(`${score}`, w / 2, h / 2);
+    ctx.fillText('VR', 62, 44);
+
+    // Retro Arcade Score Counter (formatted like '00', '05', etc.)
+    const scoreStr = score < 10 ? `0${score}` : `${score}`;
+    ctx.font = 'bold 72px "Arial Black", Impact, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Dark drop shadow
+    ctx.fillStyle = '#2d3436';
+    ctx.fillText(scoreStr, w / 2 + 35, h / 2 + 5);
+
+    // Warm orange-yellow gradient fill
+    const grad = ctx.createLinearGradient(0, 20, 0, h - 20);
+    grad.addColorStop(0, '#ffeaa7');
+    grad.addColorStop(0.5, '#fbc531');
+    grad.addColorStop(1, '#e17055');
+    ctx.fillStyle = grad;
+    ctx.fillText(scoreStr, w / 2 + 35, h / 2 + 2);
+
+    // Crisp white outline
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2.5;
+    ctx.strokeText(scoreStr, w / 2 + 35, h / 2 + 2);
   }
 
   updateScore(score) {
@@ -88,37 +118,8 @@ export class UIManager {
 
   createReadyDisplay() {
     const { texture, canvas, ctx } = this.createCanvasTexture((c, w, h) => {
-      c.clearRect(0, 0, w, h);
-
-      // Card background
-      c.fillStyle = 'rgba(0, 0, 0, 0.72)';
-      c.beginPath();
-      c.roundRect(16, 16, w - 32, h - 32, 28);
-      c.fill();
-      c.strokeStyle = '#fbc531';
-      c.lineWidth = 6;
-      c.stroke();
-
-      // Title
-      c.font = 'bold 56px Arial, sans-serif';
-      c.fillStyle = '#fbc531';
-      c.textAlign = 'center';
-      c.fillText('FLOPPY FLIGHT', w / 2, 85);
-
-      // Subtitle
-      c.font = '26px Arial, sans-serif';
-      c.fillStyle = '#ffffff';
-      c.fillText('Flap your wings down to fly!', w / 2, 145);
-
-      c.font = '22px Arial, sans-serif';
-      c.fillStyle = '#4cd137';
-      c.fillText('(Or pull controller triggers)', w / 2, 185);
-
-      // Prompt
-      c.font = 'bold 28px Arial, sans-serif';
-      c.fillStyle = '#00d2d3';
-      c.fillText('[ FLAP TO START ]', w / 2, 235);
-    }, 512, 280);
+      this.drawReadyCanvas(c, w, h);
+    }, 768, 480);
 
     const mat = new THREE.MeshBasicMaterial({
       map: texture,
@@ -126,16 +127,120 @@ export class UIManager {
       side: THREE.DoubleSide
     });
 
-    const geom = new THREE.PlaneGeometry(2.6, 1.4);
+    const geom = new THREE.PlaneGeometry(3.6, 2.25);
     this.readyMesh = new THREE.Mesh(geom, mat);
     this.readyMesh.position.set(0, 5.0, -3.8);
     this.scene.add(this.readyMesh);
   }
 
+  drawReadyCanvas(c, w, h) {
+    c.clearRect(0, 0, w, h);
+
+    // Soft sky cloud banner background
+    c.fillStyle = 'rgba(255, 255, 255, 0.92)';
+    c.beginPath();
+    c.roundRect(24, 20, w - 48, h - 40, 40);
+    c.fill();
+
+    // Vibrant sunset orange outer border
+    c.strokeStyle = '#ff793f';
+    c.lineWidth = 7;
+    c.stroke();
+
+    // Inner bright cyan border
+    c.strokeStyle = '#00d2d3';
+    c.lineWidth = 3;
+    c.strokeRect(34, 30, w - 68, h - 60);
+
+    // 1. Top VR Badge
+    c.fillStyle = '#0984e3';
+    c.beginPath();
+    c.roundRect(w / 2 - 45, 38, 90, 42, 14);
+    c.fill();
+    c.strokeStyle = '#ffffff';
+    c.lineWidth = 3;
+    c.stroke();
+
+    c.font = 'bold 26px "Arial Black", Impact, sans-serif';
+    c.fillStyle = '#ffffff';
+    c.textAlign = 'center';
+    c.fillText('VR', w / 2, 68);
+
+    // 2. Subheader "GET READY TO FLAP!"
+    c.font = 'bold 28px "Arial Black", Impact, sans-serif';
+    c.fillStyle = '#2f3542';
+    c.fillText('GET READY TO FLAP!', w / 2, 118);
+
+    // 3. Main Bubbly 3D Logo: "Floppy flight" matching reference image!
+    // "Floppy" in cyan-blue gradient with thick outline
+    const drawBubblyText = (text, x, y, size, topColor, bottomColor) => {
+      c.font = `bold ${size}px "Arial Black", Impact, sans-serif`;
+      c.textAlign = 'center';
+
+      // Thick dark drop shadow
+      c.strokeStyle = '#1e3799';
+      c.lineWidth = 14;
+      c.lineJoin = 'round';
+      c.strokeText(text, x, y + 6);
+
+      // White outline
+      c.strokeStyle = '#ffffff';
+      c.lineWidth = 9;
+      c.strokeText(text, x, y);
+
+      // Gradient Fill
+      const grad = c.createLinearGradient(0, y - size, 0, y + 10);
+      grad.addColorStop(0, topColor);
+      grad.addColorStop(1, bottomColor);
+      c.fillStyle = grad;
+      c.fillText(text, x, y);
+    };
+
+    drawBubblyText('Floppy', w / 2, 215, 105, '#48dbfb', '#0984e3');
+
+    // Wings on "flight"
+    // Left Wing
+    c.fillStyle = '#70a1ff';
+    c.beginPath();
+    c.ellipse(w / 2 - 165, 290, 38, 16, -0.3, 0, Math.PI * 2);
+    c.fill();
+    c.strokeStyle = '#ffffff';
+    c.lineWidth = 3;
+    c.stroke();
+
+    // Right Wing
+    c.beginPath();
+    c.ellipse(w / 2 + 165, 290, 38, 16, 0.3, 0, Math.PI * 2);
+    c.fill();
+    c.strokeStyle = '#ffffff';
+    c.lineWidth = 3;
+    c.stroke();
+
+    // "flight" in golden-orange gradient
+    drawBubblyText('flight', w / 2, 310, 95, '#fed330', '#eb3b5a');
+
+    // 4. Instructions Pill Button
+    c.fillStyle = '#2ed573';
+    c.beginPath();
+    c.roundRect(w / 2 - 240, 365, 480, 54, 27);
+    c.fill();
+    c.strokeStyle = '#ffffff';
+    c.lineWidth = 4;
+    c.stroke();
+
+    c.font = 'bold 24px Arial, sans-serif';
+    c.fillStyle = '#ffffff';
+    c.fillText('FLAP CONTROLLERS DOWN TO FLY!', w / 2, 400);
+
+    c.font = '16px Arial, sans-serif';
+    c.fillStyle = '#57606f';
+    c.fillText('(or pull triggers / press Space)', w / 2, 442);
+  }
+
   createGameOverDisplay() {
     const { texture, canvas, ctx } = this.createCanvasTexture((c, w, h) => {
       this.drawGameOverCanvas(c, w, h, 0, 0);
-    }, 512, 300);
+    }, 640, 380);
 
     this.gameOverCanvas = canvas;
     this.gameOverCtx = ctx;
@@ -147,7 +252,7 @@ export class UIManager {
       side: THREE.DoubleSide
     });
 
-    const geom = new THREE.PlaneGeometry(2.6, 1.5);
+    const geom = new THREE.PlaneGeometry(3.0, 1.78);
     this.gameOverMesh = new THREE.Mesh(geom, mat);
     this.gameOverMesh.visible = false;
     this.scene.add(this.gameOverMesh);
@@ -156,30 +261,53 @@ export class UIManager {
   drawGameOverCanvas(c, w, h, score, best) {
     c.clearRect(0, 0, w, h);
 
-    // Dark red accented card
-    c.fillStyle = 'rgba(20, 10, 10, 0.85)';
+    // Warm rounded sunset card
+    c.fillStyle = 'rgba(255, 255, 255, 0.95)';
     c.beginPath();
-    c.roundRect(16, 16, w - 32, h - 32, 28);
+    c.roundRect(20, 20, w - 40, h - 40, 36);
     c.fill();
-    c.strokeStyle = '#e84118';
-    c.lineWidth = 6;
+
+    // Red-orange border
+    c.strokeStyle = '#eb4d4b';
+    c.lineWidth = 8;
     c.stroke();
 
-    // Splat Title
-    c.font = 'bold 56px Arial, sans-serif';
-    c.fillStyle = '#e84118';
+    // Splat Title with 3D drop shadow
+    c.font = 'bold 64px "Arial Black", Impact, sans-serif';
     c.textAlign = 'center';
-    c.fillText('💥 SPLAT! 💥', w / 2, 80);
+    c.strokeStyle = '#b71540';
+    c.lineWidth = 10;
+    c.strokeText('💥 SPLAT! 💥', w / 2, 100);
 
-    // Score breakdown
-    c.font = '32px Arial, sans-serif';
+    c.fillStyle = '#ff793f';
+    c.fillText('💥 SPLAT! 💥', w / 2, 98);
+
+    // Score breakdown badge
+    c.fillStyle = 'rgba(47, 53, 66, 0.08)';
+    c.beginPath();
+    c.roundRect(40, 130, w - 80, 110, 20);
+    c.fill();
+
+    c.font = 'bold 36px "Arial Black", sans-serif';
+    c.fillStyle = '#2f3542';
+    c.fillText(`SCORE: ${score}`, w / 2, 175);
+
+    c.font = 'bold 28px Arial, sans-serif';
+    c.fillStyle = '#ff9f43';
+    c.fillText(`BEST SCORE: ${best}`, w / 2, 220);
+
+    // Flap to Retry button
+    c.fillStyle = '#0984e3';
+    c.beginPath();
+    c.roundRect(w / 2 - 180, 265, 360, 56, 28);
+    c.fill();
+    c.strokeStyle = '#ffffff';
+    c.lineWidth = 4;
+    c.stroke();
+
+    c.font = 'bold 26px "Arial Black", Impact, sans-serif';
     c.fillStyle = '#ffffff';
-    c.fillText(`Score: ${score}   |   Best: ${best}`, w / 2, 150);
-
-    // Action button prompt
-    c.font = 'bold 30px Arial, sans-serif';
-    c.fillStyle = '#fbc531';
-    c.fillText('[ FLAP TO RETRY ]', w / 2, 225);
+    c.fillText('FLAP TO RETRY', w / 2, 302);
   }
 
   showReady(playerPos) {

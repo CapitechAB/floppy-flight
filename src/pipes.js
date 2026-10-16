@@ -6,70 +6,171 @@ export class PipeManager {
     this.pipes = [];
     this.pipePoolSize = 10;
     this.spacingZ = 20; // Distance between pipe pairs in meters
-    this.gapHeight = 3.8; // Vertical gap between top and bottom pipe
-    this.pipeRadius = 1.1; // Body radius
-    this.lipRadius = 1.35; // Lip radius
-    this.lipHeight = 0.55;
+    this.gapHeight = 3.9; // Vertical gap
+    this.pipeRadius = 1.15; // Body radius
+    this.lipRadius = 1.42; // Lip radius
+    this.lipHeight = 0.6;
 
-    // Materials
+    // Rich cartoon materials matching the vibrant reference image
     this.pipeMat = new THREE.MeshStandardMaterial({
-      color: 0x44bd32,
-      roughness: 0.35,
-      metalness: 0.1
+      color: 0x4cd137, // Bright Nintendo/Floppy green
+      roughness: 0.28,
+      metalness: 0.08
     });
 
     this.lipMat = new THREE.MeshStandardMaterial({
-      color: 0x319a22,
-      roughness: 0.35,
+      color: 0x44bd32,
+      roughness: 0.25,
       metalness: 0.1
     });
 
+    this.lipTrimMat = new THREE.MeshStandardMaterial({
+      color: 0x27ae60,
+      roughness: 0.3
+    });
+
+    this.vineMat = new THREE.MeshStandardMaterial({
+      color: 0x1b8a36,
+      roughness: 0.5,
+      metalness: 0.05
+    });
+
+    this.leafMat = new THREE.MeshStandardMaterial({
+      color: 0x2ed573,
+      roughness: 0.35,
+      metalness: 0.05,
+      side: THREE.DoubleSide
+    });
+
     this.ringMat = new THREE.MeshStandardMaterial({
-      color: 0xfbc531,
-      roughness: 0.2,
-      metalness: 0.7,
-      emissive: 0xe1b12c,
-      emissiveIntensity: 0.35
+      color: 0xffa502,
+      roughness: 0.18,
+      metalness: 0.8,
+      emissive: 0xffa502,
+      emissiveIntensity: 0.4
+    });
+
+    this.starMat = new THREE.MeshStandardMaterial({
+      color: 0xfff200,
+      roughness: 0.15,
+      metalness: 0.6,
+      emissive: 0xfff200,
+      emissiveIntensity: 0.6
     });
 
     this.initPool();
+  }
+
+  createVines(isTop, totalHeight) {
+    const vineGroup = new THREE.Group();
+
+    // Spiral curve winding around cylinder surface
+    const points = [];
+    const turns = 2.8;
+    const steps = 36;
+    const r = this.pipeRadius + 0.035;
+
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const angle = t * turns * Math.PI * 2;
+      const y = isTop ? (t * 12 + 0.6) : (-t * 12 - 0.6);
+      const x = Math.cos(angle) * r;
+      const z = Math.sin(angle) * r;
+      points.push(new THREE.Vector3(x, y, z));
+    }
+
+    const curve = new THREE.CatmullRomCurve3(points);
+    const tubeGeom = new THREE.TubeGeometry(curve, 32, 0.045, 6, false);
+    const tubeMesh = new THREE.Mesh(tubeGeom, this.vineMat);
+    tubeMesh.castShadow = true;
+    vineGroup.add(tubeMesh);
+
+    // Leaves branching along the vine spiral
+    const leafGeom = new THREE.ConeGeometry(0.16, 0.42, 3);
+    leafGeom.scale(1.4, 0.25, 1.0);
+
+    for (let i = 2; i < points.length - 2; i += 3) {
+      const pt = points[i];
+      const leafMesh = new THREE.Mesh(leafGeom, this.leafMat);
+      leafMesh.position.copy(pt);
+
+      // Orient leaf pointing outwards and slightly tilted
+      leafMesh.lookAt(pt.x * 2, pt.y + 0.15, pt.z * 2);
+      leafMesh.rotation.z += (Math.random() - 0.5) * 0.8;
+      leafMesh.castShadow = true;
+      vineGroup.add(leafMesh);
+    }
+
+    return vineGroup;
   }
 
   createSinglePipe(isTop, totalHeight) {
     const group = new THREE.Group();
 
     // Main pipe body
-    const bodyGeom = new THREE.CylinderGeometry(this.pipeRadius, this.pipeRadius, totalHeight, 24);
+    const bodyGeom = new THREE.CylinderGeometry(this.pipeRadius, this.pipeRadius, totalHeight, 28);
     const bodyMesh = new THREE.Mesh(bodyGeom, this.pipeMat);
     bodyMesh.castShadow = true;
     bodyMesh.receiveShadow = true;
 
     // Pipe rim / lip
-    const lipGeom = new THREE.CylinderGeometry(this.lipRadius, this.lipRadius, this.lipHeight, 24);
+    const lipGeom = new THREE.CylinderGeometry(this.lipRadius, this.lipRadius, this.lipHeight, 28);
     const lipMesh = new THREE.Mesh(lipGeom, this.lipMat);
     lipMesh.castShadow = true;
     lipMesh.receiveShadow = true;
 
+    // Darker inside rim cavity
+    const innerLipGeom = new THREE.CylinderGeometry(this.pipeRadius * 0.96, this.pipeRadius * 0.96, 0.05, 24);
+    const innerLipMesh = new THREE.Mesh(innerLipGeom, this.lipTrimMat);
+
     if (isTop) {
-      // Body extends upwards, lip is at the bottom end
       bodyMesh.position.y = totalHeight / 2;
       lipMesh.position.y = this.lipHeight / 2;
+      innerLipMesh.position.y = 0.02;
     } else {
-      // Body extends downwards, lip is at the top end
       bodyMesh.position.y = -totalHeight / 2;
       lipMesh.position.y = -this.lipHeight / 2;
+      innerLipMesh.position.y = -0.02;
     }
 
     group.add(bodyMesh);
     group.add(lipMesh);
+    group.add(innerLipMesh);
+
+    // Add wrapping ivy vines & leaves!
+    const vines = this.createVines(isTop, totalHeight);
+    group.add(vines);
+
     return group;
   }
 
   createRing() {
-    const ringGeom = new THREE.TorusGeometry(0.85, 0.08, 12, 28);
+    const ringGroup = new THREE.Group();
+
+    // Torus golden ring
+    const ringGeom = new THREE.TorusGeometry(0.85, 0.09, 14, 32);
     const ringMesh = new THREE.Mesh(ringGeom, this.ringMat);
     ringMesh.castShadow = true;
-    return ringMesh;
+    ringGroup.add(ringMesh);
+
+    // Star in the center of the ring
+    const starGroup = new THREE.Group();
+    for (let s = 0; s < 2; s++) {
+      const starGeom = new THREE.ConeGeometry(0.32, 0.65, 4);
+      starGeom.scale(1, 1, 0.3);
+      const cone1 = new THREE.Mesh(starGeom, this.starMat);
+      const cone2 = new THREE.Mesh(starGeom, this.starMat);
+      cone2.rotation.z = Math.PI;
+
+      const starBlade = new THREE.Group();
+      starBlade.add(cone1);
+      starBlade.add(cone2);
+      starBlade.rotation.z = (s * Math.PI) / 2;
+      starGroup.add(starBlade);
+    }
+    ringGroup.add(starGroup);
+
+    return ringGroup;
   }
 
   initPool() {
@@ -104,7 +205,6 @@ export class PipeManager {
     let currentZ = startZ;
     for (let i = 0; i < this.pipes.length; i++) {
       const pipe = this.pipes[i];
-      // Random gap center between 3.6m and 8.0m
       const gapY = 3.6 + Math.random() * 4.4;
       this.positionPipePair(pipe, currentZ, gapY);
       currentZ -= this.spacingZ;
@@ -117,22 +217,18 @@ export class PipeManager {
     pipe.ringCollected = false;
     pipe.group.position.set(0, 0, z);
 
-    // Bottom pipe lip rests at gapY - gapHeight / 2
     const bottomLipY = gapY - this.gapHeight / 2;
     pipe.bottomPipe.position.y = bottomLipY;
 
-    // Top pipe lip rests at gapY + gapHeight / 2
     const topLipY = gapY + this.gapHeight / 2;
     pipe.topPipe.position.y = topLipY;
 
-    // Golden ring centered in gap
     pipe.ring.position.set(0, gapY, 0);
     pipe.ring.visible = true;
     pipe.ring.scale.set(1, 1, 1);
   }
 
   update(delta, playerZ, onScore) {
-    // Find the furthest pipe along -Z
     let minZ = 0;
     for (let i = 0; i < this.pipes.length; i++) {
       if (this.pipes[i].group.position.z < minZ) {
@@ -140,18 +236,16 @@ export class PipeManager {
       }
     }
 
-    // Animate rings & recycle pipes that passed behind player
     for (let i = 0; i < this.pipes.length; i++) {
       const pipe = this.pipes[i];
       const pZ = pipe.group.position.z;
 
-      // Spin golden ring
+      // Spin golden ring and star
       if (pipe.ring.visible) {
-        pipe.ring.rotation.y += delta * 2.5;
-        pipe.ring.rotation.z += delta * 1.2;
+        pipe.ring.rotation.y += delta * 2.8;
+        pipe.ring.rotation.z += delta * 1.4;
       }
 
-      // Check scoring trigger when player crosses pipe plane
       if (!pipe.scored && playerZ <= pZ) {
         pipe.scored = true;
         pipe.ringCollected = true;
@@ -159,7 +253,6 @@ export class PipeManager {
         if (onScore) onScore();
       }
 
-      // Recycle pipe when 12 meters behind player
       if (pZ > playerZ + 12) {
         const nextZ = minZ - this.spacingZ;
         const newGapY = 3.6 + Math.random() * 4.4;
@@ -170,32 +263,26 @@ export class PipeManager {
   }
 
   checkCollision(playerPos, playerRadius = 0.38) {
-    // Ground collision
     if (playerPos.y <= playerRadius + 0.1) {
       return { hit: true, cause: 'ground' };
     }
 
-    // Sky ceiling collision
     if (playerPos.y >= 16.0) {
       return { hit: true, cause: 'ceiling' };
     }
 
-    // Check collision against each pipe pair
     for (let i = 0; i < this.pipes.length; i++) {
       const pipe = this.pipes[i];
       const pipeZ = pipe.group.position.z;
 
-      // Quick bounding test in Z
       const distZ = Math.abs(playerPos.z - pipeZ);
       const hitRadius = this.pipeRadius + playerRadius;
 
       if (distZ < hitRadius) {
-        // Player is horizontally within the pipe cylinder footprint
-        const distX = Math.abs(playerPos.x); // Pipes are centered at X = 0
+        const distX = Math.abs(playerPos.x);
         const horizontalDistSq = distX * distX + distZ * distZ;
 
         if (horizontalDistSq < hitRadius * hitRadius) {
-          // Check vertical clearance
           const bottomLipY = pipe.gapY - this.gapHeight / 2;
           const topLipY = pipe.gapY + this.gapHeight / 2;
 
