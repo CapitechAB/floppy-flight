@@ -204,7 +204,7 @@ async function run() {
   const gameover = path.join(__dirname, 'src', 'assets', 'sfx', 'gameover.mp3');
   const vFatality = path.join(__dirname, 'src', 'assets', 'voice', 'voice_fatality.mp3');
 
-  console.log('Converting WebM to MP4 with BGM, Flaps, MK Announcer (Fight, 1, 2, 3, Fatality), Bonk, and Sad Trombone...');
+  console.log('Converting WebM to MP4 with BGM, Flaps, Happy Little Girl Voice Announcer (Fight, 1, 2, 3, Uh ooh!), Bonk, and Sad Trombone...');
 
   // Audio filter mixing:
   // [1:a] BGM volume 0.30

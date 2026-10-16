@@ -197,7 +197,7 @@ class FloppyFlightGame {
       sound.playGameOver();
     }, 240);
     setTimeout(() => {
-      sound.playFatality();
+      sound.playUhOh();
     }, 1750);
 
     this.triggerHaptic(1.0, 250);

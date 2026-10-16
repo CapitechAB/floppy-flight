@@ -331,15 +331,20 @@ class SoundFX {
     }
   }
 
-  playFatality() {
+  playUhOh() {
     if (this.isMuted) return;
     this.init();
-    const audio = this.voiceClips['fatality'];
+    const audio = this.voiceClips['fatality']; // "Uh ooh!"
     if (audio) {
       audio.currentTime = 0;
       audio.volume = 1.0;
       audio.play().catch(() => {});
     }
+  }
+
+  // Backwards compatibility alias
+  playFatality() {
+    this.playUhOh();
   }
 }
 

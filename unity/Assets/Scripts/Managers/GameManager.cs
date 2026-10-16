@@ -27,6 +27,7 @@ namespace FloppyFlight.Managers
         [SerializeField] private AudioClip gameOverClip;
         [SerializeField] private AudioClip fightClip;
         [SerializeField] private AudioClip fatalityClip;
+        [SerializeField] private AudioClip uhOhClip;
         [SerializeField] private AudioClip[] announcerClips;
 
         private GameState currentState = GameState.Ready;
@@ -138,10 +139,10 @@ namespace FloppyFlight.Managers
                 StartCoroutine(PlayGameOverDelayed(0.24f));
             }
 
-            // 3. Mortal Kombat Announcer "FATALITY!"
-            if (audioSource && fatalityClip)
+            // 3. Cheerful "Uh ooh!" on crash
+            if (audioSource && (uhOhClip != null || fatalityClip != null))
             {
-                StartCoroutine(PlayFatalityDelayed(1.75f));
+                StartCoroutine(PlayUhOhDelayed(1.75f));
             }
 
             // Submit score to Meta Horizon Leaderboard
@@ -160,12 +161,13 @@ namespace FloppyFlight.Managers
             }
         }
 
-        private System.Collections.IEnumerator PlayFatalityDelayed(float delay)
+        private System.Collections.IEnumerator PlayUhOhDelayed(float delay)
         {
             yield return new WaitForSeconds(delay);
-            if (audioSource && fatalityClip)
+            AudioClip clip = uhOhClip != null ? uhOhClip : fatalityClip;
+            if (audioSource && clip)
             {
-                audioSource.PlayOneShot(fatalityClip, 1.0f);
+                audioSource.PlayOneShot(clip, 1.0f);
             }
         }
     }
