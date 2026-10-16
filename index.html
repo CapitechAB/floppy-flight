@@ -17,7 +17,7 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: #4dc1f9;
+      background: #1da2d8;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
 
@@ -35,63 +35,65 @@
       top: 24px;
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(0, 0, 0, 0.65);
-      backdrop-filter: blur(8px);
+      background: rgba(15, 25, 45, 0.75);
+      backdrop-filter: blur(10px);
       padding: 14px 28px;
       border-radius: 30px;
       color: #ffffff;
       text-align: center;
       pointer-events: none;
       z-index: 10;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
-      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.25);
     }
 
     #desktop-overlay h1 {
-      font-size: 20px;
+      font-size: 22px;
       margin-bottom: 4px;
       color: #fbc531;
-      letter-spacing: 1px;
+      letter-spacing: 1.5px;
+      font-weight: 900;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
     }
 
     #desktop-overlay p {
       font-size: 13px;
-      opacity: 0.9;
+      opacity: 0.95;
     }
 
-    /* Custom VR Button style */
+    /* Custom VR Button style matching banner */
     #vr-button {
       position: absolute !important;
       bottom: 30px !important;
       left: 50% !important;
       transform: translateX(-50%) !important;
-      background: #44bd32 !important;
+      background: linear-gradient(135deg, #0984e3 0%, #00d2d3 100%) !important;
       color: #ffffff !important;
-      font-weight: bold !important;
-      font-size: 18px !important;
-      padding: 14px 32px !important;
+      font-weight: 900 !important;
+      font-size: 19px !important;
+      padding: 15px 36px !important;
       border-radius: 40px !important;
-      border: 3px solid #ffffff !important;
-      box-shadow: 0 6px 25px rgba(68, 189, 50, 0.6) !important;
+      border: 3.5px solid #ffffff !important;
+      box-shadow: 0 6px 30px rgba(0, 210, 211, 0.6) !important;
       cursor: pointer !important;
       text-transform: uppercase !important;
-      letter-spacing: 1.5px !important;
-      transition: transform 0.15s ease, background 0.15s ease !important;
+      letter-spacing: 2px !important;
+      transition: transform 0.15s ease, box-shadow 0.15s ease !important;
       z-index: 9999 !important;
     }
 
     #vr-button:hover {
-      background: #4cd137 !important;
-      transform: translateX(-50%) scale(1.05) !important;
+      transform: translateX(-50%) scale(1.06) !important;
+      box-shadow: 0 8px 35px rgba(0, 210, 211, 0.85) !important;
     }
   </style>
-  <script type="module" crossorigin src="./assets/index-BDKmGS_H.js"></script>
+  <script type="module" crossorigin src="./assets/index-Clvdx0PW.js"></script>
 </head>
 <body>
   <div id="desktop-overlay">
     <h1>🪶 FLOPPY FLIGHT VR</h1>
     <p><b>Meta Quest 3:</b> Click <b>ENTER VR</b> below & flap controllers down to fly!</p>
-    <p style="margin-top: 3px; font-size: 12px; color: #a4b0be;">(Desktop Preview: Click or press <b>SPACE</b> to flap)</p>
+    <p style="margin-top: 4px; font-size: 12px; color: #7ed6df;">(Desktop Preview: Click or press <b>SPACE</b> to flap)</p>
   </div>
 
   <div id="app"></div>
