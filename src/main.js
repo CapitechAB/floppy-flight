@@ -62,6 +62,7 @@ class FloppyFlightGame {
     // 4. VR Button with Quest prompt
     const vrBtn = VRButton.createButton(this.renderer);
     vrBtn.id = 'vr-button';
+    vrBtn.addEventListener('click', () => sound.init());
     document.body.appendChild(vrBtn);
 
     // WebXR controllers
@@ -71,7 +72,10 @@ class FloppyFlightGame {
     this.playerRig.add(this.controller1);
 
     // Trigger/Grip events for accessibility
-    const onSelect = () => this.handleFlapInput('both');
+    const onSelect = () => {
+      sound.init();
+      this.handleFlapInput('both');
+    };
     this.controller0.addEventListener('selectstart', onSelect);
     this.controller1.addEventListener('selectstart', onSelect);
     this.controller0.addEventListener('squeezestart', onSelect);
@@ -92,12 +96,14 @@ class FloppyFlightGame {
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Space' || e.code === 'KeyW' || e.code === 'ArrowUp') {
         e.preventDefault();
+        sound.init();
         this.handleFlapInput('both');
       }
     });
 
     // Desktop mouse / touch
     window.addEventListener('pointerdown', (e) => {
+      sound.init();
       // Don't trigger if clicking VR button
       if (e.target && e.target.id === 'vr-button') return;
       this.handleFlapInput('both');
@@ -119,6 +125,7 @@ class FloppyFlightGame {
     this.pitchAngle = 0;
     this.forwardSpeed = this.baseForwardSpeed;
     this.flapCooldown = 0;
+    sound.setBGMVolume(0.42);
 
     this.playerRig.position.set(0, 5.0, 0);
     this.pipeManager.reset(-18);
@@ -129,6 +136,7 @@ class FloppyFlightGame {
 
   startGame() {
     this.state = 'PLAYING';
+    sound.startBGM();
     this.ui.hideReady();
   }
 
@@ -144,6 +152,8 @@ class FloppyFlightGame {
   }
 
   handleFlapInput(side = 'both') {
+    sound.init();
+
     if (this.state === 'READY') {
       sound.playFlap();
       this.triggerHaptic(0.65, 80);
@@ -180,6 +190,7 @@ class FloppyFlightGame {
     this.gameOverDelay = 0.8; // Brief pause before allowing restart flap
 
     sound.playCrash();
+    sound.setBGMVolume(0.22); // Duck music volume slightly on Game Over
     this.triggerHaptic(1.0, 250);
 
     this.ui.showGameOver(this.playerRig.position);

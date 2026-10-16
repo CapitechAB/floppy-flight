@@ -19,6 +19,8 @@ namespace FloppyFlight.Managers
 
         [Header("Audio")]
         [SerializeField] private AudioSource audioSource;
+        [SerializeField] private AudioSource bgmAudioSource;
+        [SerializeField] private AudioClip bgmClip;
         [SerializeField] private AudioClip flapClip;
         [SerializeField] private AudioClip scoreClip;
         [SerializeField] private AudioClip crashClip;

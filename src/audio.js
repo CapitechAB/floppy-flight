@@ -1,8 +1,16 @@
-// Web Audio API Procedural Sound Synthesizer for Floppy Flight
+import bgmUrl from './assets/bgm.mp3';
+
+// Web Audio API Procedural Sound Synthesizer + Background Music Player
 class SoundFX {
   constructor() {
     this.ctx = null;
     this.isMuted = false;
+
+    // Background Music Player
+    this.bgm = new Audio(bgmUrl);
+    this.bgm.loop = true;
+    this.bgm.volume = 0.42; // Balanced so whooshes and chimes pop through
+    this.bgmStarted = false;
   }
 
   init() {
@@ -14,6 +22,34 @@ class SoundFX {
     }
     if (this.ctx && this.ctx.state === 'suspended') {
       this.ctx.resume();
+    }
+    this.startBGM();
+  }
+
+  startBGM() {
+    if (this.isMuted || this.bgmStarted) return;
+    this.bgm.play().then(() => {
+      this.bgmStarted = true;
+    }).catch(() => {
+      // Browser autoplay policy: will start on the next user interaction
+    });
+  }
+
+  pauseBGM() {
+    if (this.bgm) {
+      this.bgm.pause();
+    }
+  }
+
+  resumeBGM() {
+    if (this.bgm && !this.isMuted && this.bgmStarted) {
+      this.bgm.play().catch(() => {});
+    }
+  }
+
+  setBGMVolume(vol) {
+    if (this.bgm) {
+      this.bgm.volume = vol;
     }
   }
 
@@ -43,7 +79,7 @@ class SoundFX {
 
     const gain = this.ctx.createGain();
     gain.gain.setValueAtTime(0.01, t);
-    gain.gain.linearRampToValueAtTime(0.6, t + 0.03);
+    gain.gain.linearRampToValueAtTime(0.65, t + 0.03);
     gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
 
     noise.connect(filter);
@@ -60,7 +96,7 @@ class SoundFX {
     osc.frequency.setValueAtTime(120, t);
     osc.frequency.exponentialRampToValueAtTime(45, t + 0.12);
 
-    oscGain.gain.setValueAtTime(0.35, t);
+    oscGain.gain.setValueAtTime(0.4, t);
     oscGain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
 
     osc.connect(oscGain);
@@ -85,7 +121,7 @@ class SoundFX {
       osc.frequency.setValueAtTime(freq, startTime);
 
       gain.gain.setValueAtTime(0.01, startTime);
-      gain.gain.linearRampToValueAtTime(0.28, startTime + 0.02);
+      gain.gain.linearRampToValueAtTime(0.35, startTime + 0.02);
       gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
 
       osc.connect(gain);
@@ -113,7 +149,7 @@ class SoundFX {
     osc.frequency.setValueAtTime(260, t);
     osc.frequency.exponentialRampToValueAtTime(50, t + 0.3);
 
-    gain.gain.setValueAtTime(0.5, t);
+    gain.gain.setValueAtTime(0.55, t);
     gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
 
     osc.connect(gain);
@@ -138,7 +174,7 @@ class SoundFX {
     noiseFilter.frequency.exponentialRampToValueAtTime(150, t + 0.25);
 
     const noiseGain = this.ctx.createGain();
-    noiseGain.gain.setValueAtTime(0.4, t);
+    noiseGain.gain.setValueAtTime(0.45, t);
     noiseGain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
 
     noise.connect(noiseFilter);

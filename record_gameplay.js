@@ -18,7 +18,8 @@ function startServer() {
     '.js': 'text/javascript',
     '.css': 'text/css',
     '.svg': 'image/svg+xml',
-    '.json': 'application/json'
+    '.json': 'application/json',
+    '.mp3': 'audio/mpeg'
   };
 
   const server = http.createServer((req, res) => {
@@ -71,7 +72,7 @@ async function run() {
 
   const page = await browser.newPage();
   console.log(`Navigating to http://localhost:${PORT}...`);
-  await page.goto(`http://localhost:${PORT}`, { waitUntil: 'networkidle0' });
+  await page.goto(`http://localhost:${PORT}`, { waitUntil: 'domcontentloaded' });
 
   // Wait for canvas
   await page.waitForSelector('canvas');
@@ -191,8 +192,9 @@ async function run() {
   const mp4Path = path.join(__dirname, 'gameplay.mp4');
   const gifPath = path.join(__dirname, 'gameplay.gif');
 
-  console.log('Converting WebM to MP4 with ffmpeg...');
-  execSync(`ffmpeg -y -i "${webmPath}" -c:v libx264 -pix_fmt yuv420p -r 30 "${mp4Path}"`, { stdio: 'inherit' });
+  const bgmPath = path.join(__dirname, 'src', 'assets', 'bgm.mp3');
+  console.log('Converting WebM to MP4 with background music track...');
+  execSync(`ffmpeg -y -i "${webmPath}" -i "${bgmPath}" -c:v libx264 -pix_fmt yuv420p -r 30 -c:a aac -b:a 192k -shortest "${mp4Path}"`, { stdio: 'inherit' });
 
   console.log('Generating high-quality animated GIF with ffmpeg...');
   execSync(`ffmpeg -y -i "${mp4Path}" -vf "fps=15,scale=640:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" "${gifPath}"`, { stdio: 'inherit' });
