@@ -117,9 +117,16 @@ export class BirdAvatar {
     this.leftWing = this.createWingMesh(true);
     this.rightWing = this.createWingMesh(false);
 
-    // Default positioning on controllers
-    this.leftWing.position.set(0, 0, 0);
-    this.rightWing.position.set(0, 0, 0);
+    // Desktop view wings attached to camera
+    this.camWingLeft = this.createWingMesh(true);
+    this.camWingRight = this.createWingMesh(false);
+    this.camWingLeft.position.set(-0.35, -0.16, -0.48);
+    this.camWingLeft.scale.set(1.3, 1.3, 1.3);
+    this.camWingRight.position.set(0.35, -0.16, -0.48);
+    this.camWingRight.scale.set(1.3, 1.3, 1.3);
+
+    this.camera.add(this.camWingLeft);
+    this.camera.add(this.camWingRight);
 
     if (this.controller0) this.controller0.add(this.leftWing);
     if (this.controller1) this.controller1.add(this.rightWing);
@@ -134,25 +141,41 @@ export class BirdAvatar {
     }
   }
 
-  update(delta, birdPitchAngle) {
+  update(delta, birdPitchAngle, isPresenting = false) {
+    // Show controller wings in VR, camera wings on desktop
+    if (this.camWingLeft) this.camWingLeft.visible = !isPresenting;
+    if (this.camWingRight) this.camWingRight.visible = !isPresenting;
+
     // Beak subtle bob and pitch responsiveness
     if (this.beakMesh) {
       this.beakMesh.rotation.x = THREE.MathUtils.degToRad(-10) + (birdPitchAngle * 0.25);
     }
 
     // Animate wing flap bend / recovery
-    if (this.leftWing && this.leftFlapAnim > 0) {
+    if (this.leftFlapAnim > 0) {
       this.leftFlapAnim = Math.max(0, this.leftFlapAnim - delta * 4.0);
       const bend = Math.sin(this.leftFlapAnim * Math.PI) * 0.45;
-      this.leftWing.rotation.x = -bend;
-      this.leftWing.rotation.z = -bend * 0.5;
+      if (this.leftWing) {
+        this.leftWing.rotation.x = -bend;
+        this.leftWing.rotation.z = -bend * 0.5;
+      }
+      if (this.camWingLeft) {
+        this.camWingLeft.rotation.x = -bend;
+        this.camWingLeft.rotation.z = -bend * 0.5;
+      }
     }
 
-    if (this.rightWing && this.rightFlapAnim > 0) {
+    if (this.rightFlapAnim > 0) {
       this.rightFlapAnim = Math.max(0, this.rightFlapAnim - delta * 4.0);
       const bend = Math.sin(this.rightFlapAnim * Math.PI) * 0.45;
-      this.rightWing.rotation.x = -bend;
-      this.rightWing.rotation.z = bend * 0.5;
+      if (this.rightWing) {
+        this.rightWing.rotation.x = -bend;
+        this.rightWing.rotation.z = bend * 0.5;
+      }
+      if (this.camWingRight) {
+        this.camWingRight.rotation.x = -bend;
+        this.camWingRight.rotation.z = bend * 0.5;
+      }
     }
   }
 }

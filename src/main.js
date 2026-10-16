@@ -273,7 +273,7 @@ class FloppyFlightGame {
     }
 
     // Avatar wing/beak animation
-    this.avatar.update(delta, this.pitchAngle);
+    this.avatar.update(delta, this.pitchAngle, this.renderer.xr.isPresenting);
 
     // Environment scrolling
     this.environment.update(delta, this.playerRig.position.z);
@@ -285,5 +285,5 @@ class FloppyFlightGame {
 
 // Start game on page load
 window.addEventListener('DOMContentLoaded', () => {
-  new FloppyFlightGame();
+  window.gameInstance = new FloppyFlightGame();
 });

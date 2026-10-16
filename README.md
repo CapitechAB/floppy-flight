@@ -2,6 +2,8 @@
 
 A 3D first-person Virtual Reality game for the **Meta Quest 3**, inspired by classic Flappy Bird.
 
+![Floppy Flight Gameplay Preview](gameplay.gif)
+
 Fly from the first-person perspective of a bird through retro 3D pipe obstacles! Gain altitude by physically flapping your Quest Touch Plus controllers downward, or pull the controller triggers.
 
 ---
