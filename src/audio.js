@@ -290,7 +290,7 @@ class SoundFX {
     } catch (e) {}
   }
 
-  // Hyped Bird-Caster Announcer Voice ("One!", "Two!", etc.)
+  // Mortal Kombat Announcer Voice ("One!", "Two!", "Fight!", "Fatality!", etc.)
   playAnnouncer(score) {
     if (this.isMuted) return;
     this.init();
@@ -303,13 +303,41 @@ class SoundFX {
 
     const audio = this.voiceClips[clipKey];
     if (audio) {
-      this.setBGMVolume(0.20);
+      this.setBGMVolume(0.18);
+      const isMilestone = (score % 5 === 0) || score > 20;
+      const duckDuration = isMilestone ? 1400 : 850;
       setTimeout(() => {
         if (!this.isGameOver) this.setBGMVolume(0.38);
-      }, 700);
+      }, duckDuration);
 
       audio.currentTime = 0;
-      audio.volume = 0.95;
+      audio.volume = 1.0; // Booming Mortal Kombat delivery
+      audio.play().catch(() => {});
+    }
+  }
+
+  playFight() {
+    if (this.isMuted) return;
+    this.init();
+    const audio = this.voiceClips['fight'];
+    if (audio) {
+      this.setBGMVolume(0.18);
+      setTimeout(() => {
+        if (!this.isGameOver) this.setBGMVolume(0.38);
+      }, 950);
+      audio.currentTime = 0;
+      audio.volume = 1.0;
+      audio.play().catch(() => {});
+    }
+  }
+
+  playFatality() {
+    if (this.isMuted) return;
+    this.init();
+    const audio = this.voiceClips['fatality'];
+    if (audio) {
+      audio.currentTime = 0;
+      audio.volume = 1.0;
       audio.play().catch(() => {});
     }
   }

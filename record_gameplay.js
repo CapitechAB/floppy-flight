@@ -194,6 +194,7 @@ async function run() {
   const gifPath = path.join(__dirname, 'gameplay.gif');
 
   const bgmPath = path.join(__dirname, 'src', 'assets', 'bgm.mp3');
+  const vFight = path.join(__dirname, 'src', 'assets', 'voice', 'voice_fight.mp3');
   const v1 = path.join(__dirname, 'src', 'assets', 'voice', 'voice_1.mp3');
   const v2 = path.join(__dirname, 'src', 'assets', 'voice', 'voice_2.mp3');
   const v3 = path.join(__dirname, 'src', 'assets', 'voice', 'voice_3.mp3');
@@ -201,29 +202,34 @@ async function run() {
   const f2 = path.join(__dirname, 'src', 'assets', 'sfx', 'flap_2.mp3');
   const bonk = path.join(__dirname, 'src', 'assets', 'sfx', 'bonk.mp3');
   const gameover = path.join(__dirname, 'src', 'assets', 'sfx', 'gameover.mp3');
+  const vFatality = path.join(__dirname, 'src', 'assets', 'voice', 'voice_fatality.mp3');
 
-  console.log('Converting WebM to MP4 with BGM, Flap sounds, Announcer, Bonk, and Sad Trombone Game Over...');
+  console.log('Converting WebM to MP4 with BGM, Flaps, MK Announcer (Fight, 1, 2, 3, Fatality), Bonk, and Sad Trombone...');
 
   // Audio filter mixing:
-  // [1:a] BGM volume 0.32
-  // [2:a] voice 1 at 4200ms
-  // [3:a] voice 2 at 6800ms
-  // [4:a] voice 3 at 9200ms
-  // [5:a] flap 1 at 1500ms
-  // [6:a] flap 2 at 1950ms
-  // [7:a] bonk at 10800ms
-  // [8:a] gameover sad trombone at 11050ms
-  const filterComplex = `[1:a]volume=0.32[bgm];` +
-    `[2:a]adelay=4200|4200,volume=1.25[v1];` +
-    `[3:a]adelay=6800|6800,volume=1.25[v2];` +
-    `[4:a]adelay=9200|9200,volume=1.25[v3];` +
-    `[5:a]adelay=1500|1500,volume=0.95[f1];` +
-    `[6:a]adelay=1950|1950,volume=0.95[f2];` +
-    `[7:a]adelay=10800|10800,volume=1.4[bnk];` +
-    `[8:a]adelay=11050|11050,volume=1.2[gov];` +
-    `[bgm][v1][v2][v3][f1][f2][bnk][gov]amix=inputs=8:duration=first:dropout_transition=2[aout]`;
+  // [1:a] BGM volume 0.30
+  // [2:a] Fight! at 1500ms
+  // [3:a] voice 1 at 4200ms
+  // [4:a] voice 2 at 6800ms
+  // [5:a] voice 3 at 9200ms
+  // [6:a] flap 1 at 1500ms
+  // [7:a] flap 2 at 1950ms
+  // [8:a] bonk at 10800ms
+  // [9:a] gameover sad trombone at 11050ms
+  // [10:a] Fatality! at 12200ms
+  const filterComplex = `[1:a]volume=0.30[bgm];` +
+    `[2:a]adelay=1500|1500,volume=1.35[vf];` +
+    `[3:a]adelay=4200|4200,volume=1.35[v1];` +
+    `[4:a]adelay=6800|6800,volume=1.35[v2];` +
+    `[5:a]adelay=9200|9200,volume=1.35[v3];` +
+    `[6:a]adelay=1500|1500,volume=0.90[f1];` +
+    `[7:a]adelay=1950|1950,volume=0.90[f2];` +
+    `[8:a]adelay=10800|10800,volume=1.4[bnk];` +
+    `[9:a]adelay=11050|11050,volume=1.15[gov];` +
+    `[10:a]adelay=12200|12200,volume=1.45[vfat];` +
+    `[bgm][vf][v1][v2][v3][f1][f2][bnk][gov][vfat]amix=inputs=10:duration=first:dropout_transition=2[aout]`;
 
-  execSync(`"${FFMPEG_PATH}" -y -i "${webmPath}" -i "${bgmPath}" -i "${v1}" -i "${v2}" -i "${v3}" -i "${f1}" -i "${f2}" -i "${bonk}" -i "${gameover}" -filter_complex "${filterComplex}" -map 0:v -map "[aout]" -c:v libx264 -pix_fmt yuv420p -r 30 -c:a aac -b:a 192k -shortest "${mp4Path}"`, { stdio: 'inherit' });
+  execSync(`"${FFMPEG_PATH}" -y -i "${webmPath}" -i "${bgmPath}" -i "${vFight}" -i "${v1}" -i "${v2}" -i "${v3}" -i "${f1}" -i "${f2}" -i "${bonk}" -i "${gameover}" -i "${vFatality}" -filter_complex "${filterComplex}" -map 0:v -map "[aout]" -c:v libx264 -pix_fmt yuv420p -r 30 -c:a aac -b:a 192k -shortest "${mp4Path}"`, { stdio: 'inherit' });
 
   console.log('Generating high-quality animated GIF with ffmpeg...');
   execSync(`"${FFMPEG_PATH}" -y -i "${mp4Path}" -vf "fps=15,scale=640:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" "${gifPath}"`, { stdio: 'inherit' });

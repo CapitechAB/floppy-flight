@@ -25,6 +25,8 @@ namespace FloppyFlight.Managers
         [SerializeField] private AudioClip scoreClip;
         [SerializeField] private AudioClip bonkClip;
         [SerializeField] private AudioClip gameOverClip;
+        [SerializeField] private AudioClip fightClip;
+        [SerializeField] private AudioClip fatalityClip;
         [SerializeField] private AudioClip[] announcerClips;
 
         private GameState currentState = GameState.Ready;
@@ -69,6 +71,7 @@ namespace FloppyFlight.Managers
                 currentState = GameState.Flying;
                 flightController.IsFlying = true;
                 if (bgmAudioSource && !bgmAudioSource.isPlaying) bgmAudioSource.Play();
+                if (audioSource && fightClip) audioSource.PlayOneShot(fightClip, 1.0f);
             }
             else if (currentState == GameState.GameOver && gameOverCooldown <= 0)
             {
@@ -95,7 +98,7 @@ namespace FloppyFlight.Managers
                 audioSource.PlayOneShot(scoreClip, 0.7f);
             }
 
-            // Hyped Bird Announcer
+            // Mortal Kombat Announcer ("One!", "Two!", "Excellent!", etc.)
             if (audioSource && announcerClips != null && currentScore <= announcerClips.Length)
             {
                 audioSource.PlayOneShot(announcerClips[currentScore - 1], 1.0f);
@@ -135,6 +138,12 @@ namespace FloppyFlight.Managers
                 StartCoroutine(PlayGameOverDelayed(0.24f));
             }
 
+            // 3. Mortal Kombat Announcer "FATALITY!"
+            if (audioSource && fatalityClip)
+            {
+                StartCoroutine(PlayFatalityDelayed(1.75f));
+            }
+
             // Submit score to Meta Horizon Leaderboard
             if (MetaPlatformManager.Instance != null)
             {
@@ -148,6 +157,15 @@ namespace FloppyFlight.Managers
             if (audioSource && gameOverClip)
             {
                 audioSource.PlayOneShot(gameOverClip, 0.95f);
+            }
+        }
+
+        private System.Collections.IEnumerator PlayFatalityDelayed(float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            if (audioSource && fatalityClip)
+            {
+                audioSource.PlayOneShot(fatalityClip, 1.0f);
             }
         }
     }
