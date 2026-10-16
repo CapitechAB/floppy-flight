@@ -1,0 +1,62 @@
+name: Quest release AAB
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "unity/**"
+      - ".github/workflows/quest-release-aab.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-aab:
+    name: Signed Android App Bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Unity Library
+        uses: actions/cache@v4
+        with:
+          path: unity/Library
+          key: Library-quest-android-${{ hashFiles('unity/Assets/**', 'unity/Packages/**', 'unity/ProjectSettings/**') }}
+          restore-keys: |
+            Library-quest-android-
+
+      - name: Build signed release AAB
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          projectPath: unity
+          unityVersion: 6000.0.83f1
+          targetPlatform: Android
+          buildName: FloppyFlight
+          buildsPath: build
+          buildMethod: FloppyFlight.Editor.BuildScript.BuildAndroidAab
+          androidExportType: androidAppBundle
+          androidVersionCode: ${{ github.run_number }}
+          versioning: None
+          androidKeystoreName: floppy-flight-release.keystore
+          androidKeystoreBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          androidKeystorePass: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          androidKeyaliasName: ${{ secrets.ANDROID_KEYALIAS_NAME }}
+          androidKeyaliasPass: ${{ secrets.ANDROID_KEYALIAS_PASS }}
+          customParameters: -metaAppId ${{ secrets.META_APP_ID }}
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FloppyFlight-Quest-release
+          path: |
+            build/**/*.aab
+            unity/Builds/**/*.aab
+          if-no-files-found: error
+          retention-days: 14

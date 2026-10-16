@@ -35,6 +35,10 @@ namespace FloppyFlight.Managers
         private int bestScore = 0;
         private float gameOverCooldown = 0f;
 
+        public int Score => currentScore;
+        public int Best => bestScore;
+        public GameState State => currentState;
+
         void Awake()
         {
             if (Instance == null) Instance = this;
@@ -45,6 +49,7 @@ namespace FloppyFlight.Managers
         {
             bestScore = PlayerPrefs.GetInt("BestScore", 0);
             flightController.OnFlap += HandlePlayerFlap;
+            PrepareBgm();
             ResetGame();
         }
 
@@ -55,6 +60,14 @@ namespace FloppyFlight.Managers
             flightController.ResetPosition(new Vector3(0, 5.0f, 0));
             pipeSpawner.ResetPipes(-18f);
             if (bgmAudioSource) bgmAudioSource.volume = 0.38f;
+        }
+
+        private void PrepareBgm()
+        {
+            if (bgmAudioSource == null) return;
+            if (bgmClip != null) bgmAudioSource.clip = bgmClip;
+            bgmAudioSource.loop = true;
+            bgmAudioSource.volume = 0.38f;
         }
 
         private void HandlePlayerFlap(bool isBoth)
