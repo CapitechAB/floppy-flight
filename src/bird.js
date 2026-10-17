@@ -25,9 +25,8 @@ export class BirdAvatar {
     const beakGroup = new THREE.Group();
 
     // 4-sided pyramid cone with flat faceted shading matching the user screenshot exactly
-    const beakGeom = new THREE.ConeGeometry(0.088, 0.32, 4);
-    beakGeom.rotateX(Math.PI / 2);
-    beakGeom.rotateY(Math.PI / 4);
+    const beakGeom = new THREE.ConeGeometry(0.12, 0.36, 4);
+    beakGeom.rotateX(-Math.PI / 2);
 
     const beakMat = new THREE.MeshStandardMaterial({
       color: 0xf39c12, // Rich golden cartoon yellow
@@ -37,7 +36,7 @@ export class BirdAvatar {
     });
 
     const beakMesh = new THREE.Mesh(beakGeom, beakMat);
-    beakMesh.scale.set(1.15, 0.75, 1.3);
+    beakMesh.scale.set(1.2, 0.8, 1.3);
     beakMesh.castShadow = true;
     beakGroup.add(beakMesh);
 
@@ -47,16 +46,17 @@ export class BirdAvatar {
     nostrilGeom.scale(0.8, 1.4, 1.6);
 
     const leftNostril = new THREE.Mesh(nostrilGeom, nostrilMat);
-    leftNostril.position.set(-0.024, 0.032, -0.06);
+    leftNostril.position.set(-0.024, 0.032, 0.04);
     beakGroup.add(leftNostril);
 
     const rightNostril = new THREE.Mesh(nostrilGeom, nostrilMat);
-    rightNostril.position.set(0.024, 0.032, -0.06);
+    rightNostril.position.set(0.024, 0.032, 0.04);
     beakGroup.add(rightNostril);
 
     // Positioned in lower view pointing forward/up toward the horizon
-    beakGroup.position.set(0, -0.15, -0.32);
-    beakGroup.rotation.x = THREE.MathUtils.degToRad(-10);
+    beakGroup.position.set(0, -0.16, -0.30);
+    beakGroup.rotation.x = THREE.MathUtils.degToRad(-8);
+    beakGroup.rotation.y = 0;
 
     this.camera.add(beakGroup);
     this.beakMesh = beakGroup;
@@ -186,7 +186,8 @@ export class BirdAvatar {
 
     // Beak pitch response with head bobbing
     if (this.beakMesh) {
-      this.beakMesh.rotation.x = THREE.MathUtils.degToRad(-10) + (birdPitchAngle * 0.22);
+      this.beakMesh.rotation.x = THREE.MathUtils.degToRad(-8) + (birdPitchAngle * 0.22);
+      this.beakMesh.rotation.y = 0;
     }
 
     // Aerodynamic flex responding dynamically to controller velocity

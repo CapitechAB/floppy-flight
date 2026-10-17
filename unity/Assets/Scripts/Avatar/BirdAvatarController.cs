@@ -24,7 +24,7 @@ namespace FloppyFlight.Avatar
             {
                 beakMesh.SetParent(centerEyeCamera, false);
                 beakMesh.localPosition = beakOffset;
-                beakMesh.localRotation = Quaternion.Euler(10f, 0, 0);
+                beakMesh.localRotation = Quaternion.Euler(10f, 90f, 0);
             }
         }
 
