@@ -70,7 +70,7 @@ Open `unity/` in that editor with Android Build Support (SDK, NDK, OpenJDK). Pac
 | Min / target API | 32 / 34 (Android 14). New Horizon apps created after 1 March 2026 must target API 34. |
 | Graphics | Vulkan only, linear color space, multithreaded rendering |
 | Input | Input System Package only (`activeInputHandler: 1` in `ProjectSettings/ProjectSettings.asset`). Both is unsupported on Android and breaks Meta XR serialization. `com.unity.inputsystem` 1.20.1 is in the manifest. |
-| XR | OpenXR loader, Meta Quest Support, Oculus Touch / Touch Pro / Touch Plus profiles, Single Pass Instanced (Vulkan multiview). Symmetric projection is off so Quest 1 in the default device list cannot fail validation. Latency optimization is Prioritize Input Polling. |
+| XR | OpenXR loader, Meta Quest Support, and the Meta XR feature group. Meta's build step then keeps the loader inside OVRPlugin and drops Unity's `openxr_loader.aar`, because both ship `libopenxr_loader.so` and the binaries are not the same. A launcher `jniLibs.pickFirsts` entry covers any leftover copy. Oculus Touch / Touch Pro / Touch Plus profiles, Single Pass Instanced (Vulkan multiview). Symmetric projection is off so Quest 1 in the default device list cannot fail validation. System keyboard is off in both Meta Quest Support and OVR Project Config so the manifest does not declare `oculus.software.overlay_keyboard` twice. Latency optimization is Prioritize Input Polling. |
 | Devices | Quest 2, Quest Pro, Quest 3, Quest 3S |
 | Activity | Game Activity (`AndroidApplicationEntry.GameActivity` only) |
 | Permissions | Internet, for entitlements and leaderboards |

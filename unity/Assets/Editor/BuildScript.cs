@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Reflection;
+using System.Text;
 using UnityEditor;
+using UnityEditor.Android;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEditor.XR.Management;
@@ -27,6 +30,8 @@ namespace FloppyFlight.Editor
         public const string CompanyName = "Capitech AB";
         public const string DefaultVersion = "1.0.0";
         const string OpenXrLoader = "UnityEngine.XR.OpenXR.OpenXRLoader";
+        const string MetaXrFeatureSetId = "com.meta.openxr.featureset.metaxr";
+        const string MetaXrFeatureId = "com.meta.openxr.feature.metaxr";
 
         static int s_bootstrapRetries;
 
@@ -268,8 +273,13 @@ namespace FloppyFlight.Editor
             InvokeInstance(feature, "EnableTargetDevice", "quest", false);
             SetInternal(feature, "symmetricProjection", false);
             SetInternal(feature, "optimizeBufferDiscards", true);
+            // OVRProjectConfig.requiresSystemKeyboard also writes oculus.software.overlay_keyboard.
+            // Unity warns about a duplicate uses-feature when both are enabled.
+            feature.enableSystemKeyboard = false;
             EditorUtility.SetDirty(feature);
             EnableInteractionProfiles(group);
+            EnableMetaXrFeatureGroup(group);
+            DisableOvrSystemKeyboard();
 
             var openXr = OpenXRSettings.GetSettingsForBuildTargetGroup(group);
             if (openXr == null)
@@ -281,7 +291,51 @@ namespace FloppyFlight.Editor
             EditorUtility.SetDirty(openXr);
             AssetDatabase.SaveAssets();
 
-            Debug.Log("[FloppyFlight] OpenXR Android loader enabled. Meta Quest Support targets Quest 2, Quest Pro, Quest 3, and Quest 3S. Stereo mode is Single Pass Instanced (Vulkan multiview). Oculus Touch, Touch Pro, and Touch Plus profiles are enabled. Symmetric projection is off. Latency optimization is Prioritize Input Polling.");
+            Debug.Log("[FloppyFlight] OpenXR Android loader enabled. Meta Quest Support and the Meta XR feature group are on. Meta's build step keeps OVRPlugin's libopenxr_loader.so and drops Unity's openxr_loader.aar. Targets are Quest 2, Quest Pro, Quest 3, and Quest 3S. Stereo mode is Single Pass Instanced (Vulkan multiview). Oculus Touch, Touch Pro, and Touch Plus profiles are enabled. Symmetric projection is off. System keyboard manifest entries are off. Latency optimization is Prioritize Input Polling.");
+        }
+
+        static void EnableMetaXrFeatureGroup(BuildTargetGroup group)
+        {
+            // com.meta.xr.sdk.core OVRGradleGeneration only strips the second loader
+            // when MetaXRFeature is enabled. The feature-group enabler does not run
+            // in batch mode before the package features exist, so enable it here.
+            var featureSet = OpenXRFeatureSetManager.GetFeatureSetWithId(group, MetaXrFeatureSetId);
+            if (featureSet == null)
+            {
+                throw new InvalidOperationException(
+                    "Meta XR OpenXR feature group was not found (" + MetaXrFeatureSetId + "). com.meta.xr.sdk.core from com.meta.xr.sdk.all 207.0.1 is required.");
+            }
+
+            featureSet.isEnabled = true;
+            OpenXRFeatureSetManager.SetFeaturesFromEnabledFeatureSets(group);
+
+            var metaXr = FeatureHelpers.GetFeatureWithIdForBuildTarget(group, MetaXrFeatureId);
+            if (metaXr == null)
+            {
+                throw new InvalidOperationException(
+                    "Meta XR Feature was not found (" + MetaXrFeatureId + "). com.meta.xr.sdk.core 207.0.1 is required.");
+            }
+
+            metaXr.enabled = true;
+            EditorUtility.SetDirty(metaXr);
+        }
+
+        static void DisableOvrSystemKeyboard()
+        {
+            var configType = FindTypeByName("OVRProjectConfig");
+            if (configType == null)
+                return;
+
+            var cached = configType.GetProperty("CachedProjectConfig", BindingFlags.Public | BindingFlags.Static)
+                ?.GetValue(null);
+            var field = configType.GetField("requiresSystemKeyboard", BindingFlags.Instance | BindingFlags.Public);
+            if (cached == null || field == null || !(field.GetValue(cached) is bool on) || !on)
+                return;
+
+            field.SetValue(cached, false);
+            configType.GetMethod("CommitProjectConfig", BindingFlags.Public | BindingFlags.Static)
+                ?.Invoke(null, new[] { cached });
+            Debug.Log("[FloppyFlight] Turned off OVRProjectConfig.requiresSystemKeyboard so it does not duplicate the Meta Quest Support keyboard manifest entry.");
         }
 
         static readonly string[] InteractionProfileIds =
@@ -362,6 +416,11 @@ namespace FloppyFlight.Editor
 
         static Type FindType(string simpleName)
         {
+            return FindTypeByName(simpleName, "Oculus.Platform");
+        }
+
+        static Type FindTypeByName(string simpleName, string namespaceName = null)
+        {
             foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
                 Type[] types;
@@ -370,7 +429,9 @@ namespace FloppyFlight.Editor
                 if (types == null) continue;
                 foreach (var type in types)
                 {
-                    if (type != null && type.Name == simpleName && type.Namespace == "Oculus.Platform")
+                    if (type != null
+                        && type.Name == simpleName
+                        && (namespaceName == null || type.Namespace == namespaceName))
                         return type;
                 }
             }
@@ -544,6 +605,184 @@ namespace FloppyFlight.Editor
                 }
             }
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Unity OpenXR 1.18 and Meta XR Core 207 both package libopenxr_loader.so.
+    /// The binaries differ (Khronos 1.1.54 AAR vs the smaller loader inside OVRPlugin.aar).
+    /// Meta's preprocess removes the Unity AAR when the Meta XR feature is enabled. This
+    /// runs after that and still drops any leftover copy from openxr_loader.aar, then
+    /// tells the launcher module to pick a single match so mergeReleaseNativeLibs cannot
+    /// fail if another package adds the same path.
+    /// </summary>
+    class OpenXrLoaderGradleDedupe : IPostGenerateGradleAndroidProject
+    {
+        const string PickFirstMarker = "FloppyFlightOpenXrLoaderPickFirst";
+        const string LoaderSo = "libopenxr_loader.so";
+
+        public int callbackOrder => 100000;
+
+        public void OnPostGenerateGradleAndroidProject(string path)
+        {
+            var unityLibrary = ResolveUnityLibrary(path);
+            var removed = StripUnityLoaderBesideOvrPlugin(unityLibrary);
+            var launcherGradle = ResolveLauncherGradle(path, unityLibrary);
+            var patched = PatchLauncherPickFirst(launcherGradle);
+            Debug.Log(
+                "[FloppyFlight] OpenXR loader packaging: removed " + removed
+                + " libopenxr_loader.so entries from Unity's openxr_loader.aar"
+                + (patched ? " and added launcher jniLibs.pickFirsts." : ". Launcher pickFirst was already present.")
+                + " OVRPlugin keeps the loader Quest runs.");
+        }
+
+        static int StripUnityLoaderBesideOvrPlugin(string unityLibrary)
+        {
+            if (string.IsNullOrEmpty(unityLibrary) || !Directory.Exists(unityLibrary))
+                return 0;
+
+            var ovrPresent = Directory.GetFiles(unityLibrary, "OVRPlugin.aar", SearchOption.AllDirectories).Length > 0;
+            if (!ovrPresent)
+            {
+                Debug.LogWarning("[FloppyFlight] OVRPlugin.aar was not in the Gradle project, so Unity's OpenXR loader was left in place.");
+                return 0;
+            }
+
+            var loaderAars = Directory.GetFiles(unityLibrary, "openxr_loader.aar", SearchOption.AllDirectories);
+            if (loaderAars.Length == 0)
+            {
+                Debug.Log("[FloppyFlight] Unity openxr_loader.aar is not in the Gradle project. Meta's Meta XR feature preprocess already excluded it. OVRPlugin supplies libopenxr_loader.so.");
+            }
+
+            var removed = 0;
+            foreach (var aar in loaderAars)
+                removed += RemoveLoaderFromAar(aar);
+
+            var jniLibs = Path.Combine(unityLibrary, "src", "main", "jniLibs");
+            if (Directory.Exists(jniLibs))
+            {
+                foreach (var so in Directory.GetFiles(jniLibs, LoaderSo, SearchOption.AllDirectories))
+                {
+                    File.Delete(so);
+                    removed++;
+                }
+            }
+
+            return removed;
+        }
+
+        static int RemoveLoaderFromAar(string aarPath)
+        {
+            var temp = aarPath + ".floppyflight-tmp";
+            var removed = 0;
+            using (var inputStream = File.OpenRead(aarPath))
+            using (var input = new ZipArchive(inputStream, ZipArchiveMode.Read))
+            using (var outputStream = File.Create(temp))
+            using (var output = new ZipArchive(outputStream, ZipArchiveMode.Create))
+            {
+                foreach (var entry in input.Entries)
+                {
+                    var name = entry.FullName.Replace('\\', '/');
+                    if (name.EndsWith("/" + LoaderSo, StringComparison.Ordinal)
+                        || string.Equals(entry.Name, LoaderSo, StringComparison.Ordinal))
+                    {
+                        removed++;
+                        continue;
+                    }
+
+                    if (string.IsNullOrEmpty(entry.Name))
+                    {
+                        output.CreateEntry(entry.FullName);
+                        continue;
+                    }
+
+                    var stored = entry.Length == entry.CompressedLength;
+                    var created = output.CreateEntry(entry.FullName, stored ? CompressionLevel.NoCompression : CompressionLevel.Optimal);
+                    using (var source = entry.Open())
+                    using (var destination = created.Open())
+                        source.CopyTo(destination);
+                }
+            }
+
+            if (removed == 0)
+            {
+                File.Delete(temp);
+                return 0;
+            }
+
+            var attributes = File.GetAttributes(aarPath);
+            if ((attributes & FileAttributes.ReadOnly) != 0)
+                File.SetAttributes(aarPath, attributes & ~FileAttributes.ReadOnly);
+            File.Copy(temp, aarPath, true);
+            File.Delete(temp);
+            return removed;
+        }
+
+        static bool PatchLauncherPickFirst(string launcherGradle)
+        {
+            if (string.IsNullOrEmpty(launcherGradle) || !File.Exists(launcherGradle))
+            {
+                Debug.LogWarning("[FloppyFlight] launcher/build.gradle was not found. Could not add the OpenXR loader pickFirst.");
+                return false;
+            }
+
+            var text = File.ReadAllText(launcherGradle);
+            if (text.Contains(PickFirstMarker) || text.Contains("libopenxr_loader.so"))
+                return false;
+
+            var snippet = new StringBuilder();
+            snippet.AppendLine();
+            snippet.AppendLine("// " + PickFirstMarker);
+            snippet.AppendLine("// Unity's openxr_loader.aar and OVRPlugin.aar can both contain this library.");
+            snippet.AppendLine("// The Unity copy is removed above; pickFirst covers any other leftover.");
+            snippet.AppendLine("android {");
+            snippet.AppendLine("    packaging {");
+            snippet.AppendLine("        jniLibs {");
+            snippet.AppendLine("            pickFirsts += ['**/libopenxr_loader.so']");
+            snippet.AppendLine("        }");
+            snippet.AppendLine("    }");
+            snippet.AppendLine("}");
+            File.AppendAllText(launcherGradle, snippet.ToString());
+            return true;
+        }
+
+        static string ResolveUnityLibrary(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+                return null;
+            if (File.Exists(Path.Combine(path, "build.gradle")) && Directory.Exists(Path.Combine(path, "src")))
+                return path;
+            var nested = Path.Combine(path, "unityLibrary");
+            if (Directory.Exists(nested))
+                return nested;
+            var parent = Directory.GetParent(path);
+            if (parent != null)
+            {
+                var sibling = Path.Combine(parent.FullName, "unityLibrary");
+                if (Directory.Exists(sibling))
+                    return sibling;
+            }
+            return path;
+        }
+
+        static string ResolveLauncherGradle(string path, string unityLibrary)
+        {
+            var candidates = new List<string>();
+            if (!string.IsNullOrEmpty(path))
+                candidates.Add(Path.Combine(path, "launcher", "build.gradle"));
+            if (!string.IsNullOrEmpty(unityLibrary))
+            {
+                var parent = Directory.GetParent(unityLibrary);
+                if (parent != null)
+                    candidates.Add(Path.Combine(parent.FullName, "launcher", "build.gradle"));
+            }
+
+            foreach (var candidate in candidates)
+            {
+                if (File.Exists(candidate))
+                    return candidate;
+            }
+            return candidates.Count > 0 ? candidates[candidates.Count - 1] : null;
         }
     }
 }
