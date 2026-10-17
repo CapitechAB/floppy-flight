@@ -97,7 +97,7 @@ namespace FloppyFlight.Editor
             AssignProjectMaterials(instance);
 
             var prefab = PrefabUtility.SaveAsPrefabAsset(instance, PrefabPath);
-            Object.DestroyImmediate(instance);
+            UnityEngine.Object.DestroyImmediate(instance);
             Debug.Log("[FloppyFlight] Created " + PrefabPath);
             return prefab;
         }
