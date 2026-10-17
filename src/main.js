@@ -9,8 +9,17 @@ import { UIManager } from './ui.js';
 
 class FloppyFlightGame {
   constructor() {
-    this.state = 'READY'; // 'READY', 'PLAYING', 'GAMEOVER'
+    this.state = 'READY'; // 'READY', 'PLAYING', 'LEVEL_CLEARED', 'GAMEOVER'
     this.score = 0;
+    this.currentLevel = 1;
+    this.levelPipesCleared = 0;
+    this.pipesPerLevel = 10;
+    this.levelClearedSavedY = 5.0;
+
+    // Raycasters for mouse & VR interaction with UI
+    this.raycaster = new THREE.Raycaster();
+    this.mouse = new THREE.Vector2();
+    this.controllerRaycaster = new THREE.Raycaster();
 
     // Physics parameters
     this.forwardSpeed = 7.5;
@@ -85,8 +94,18 @@ class FloppyFlightGame {
     this.playerRig.add(this.controller1);
 
     // Trigger/Grip events for accessibility
-    const onSelect = () => {
+    const onSelect = (e) => {
       sound.init();
+      if (this.state === 'LEVEL_CLEARED') {
+        const action = this.checkControllerHit(e.target);
+        if (action === 'quit') {
+          this.quitGame();
+        } else {
+          // Pointing at Next Level or anywhere else in VR triggers Next Level safely
+          this.nextLevel();
+        }
+        return;
+      }
       this.handleFlapInput('both');
     };
     this.controller0.addEventListener('selectstart', onSelect);
@@ -108,6 +127,19 @@ class FloppyFlightGame {
   setupInputs() {
     // Desktop keyboard
     window.addEventListener('keydown', (e) => {
+      if (this.state === 'LEVEL_CLEARED') {
+        if (e.code === 'Space' || e.code === 'Enter') {
+          e.preventDefault();
+          this.nextLevel();
+          return;
+        }
+        if (e.code === 'KeyQ' || e.code === 'Escape') {
+          e.preventDefault();
+          this.quitGame();
+          return;
+        }
+      }
+
       if (e.code === 'Space' || e.code === 'KeyW' || e.code === 'ArrowUp') {
         e.preventDefault();
         sound.init();
@@ -120,8 +152,57 @@ class FloppyFlightGame {
       sound.init();
       // Don't trigger if clicking VR button
       if (e.target && e.target.id === 'vr-button') return;
+
+      if (this.state === 'LEVEL_CLEARED') {
+        const action = this.checkPointerHit(e.clientX, e.clientY);
+        if (action === 'next') {
+          this.nextLevel();
+          return;
+        } else if (action === 'quit') {
+          this.quitGame();
+          return;
+        }
+        // Deliberate click protection: clicking outside the buttons is ignored
+        return;
+      }
+
       this.handleFlapInput('both');
     });
+
+    // Pointer hover cursor feedback
+    window.addEventListener('pointermove', (e) => {
+      if (this.state === 'LEVEL_CLEARED') {
+        const action = this.checkPointerHit(e.clientX, e.clientY);
+        document.body.style.cursor = action ? 'pointer' : 'default';
+      } else {
+        document.body.style.cursor = 'default';
+      }
+    });
+  }
+
+  checkPointerHit(clientX, clientY) {
+    if (!this.ui.levelClearedMesh || !this.ui.levelClearedMesh.visible) return null;
+    this.mouse.x = (clientX / window.innerWidth) * 2 - 1;
+    this.mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+    const intersects = this.raycaster.intersectObject(this.ui.levelClearedMesh);
+    if (intersects.length > 0 && intersects[0].uv) {
+      return this.ui.checkLevelClearedHit(intersects[0].uv);
+    }
+    return null;
+  }
+
+  checkControllerHit(controller) {
+    if (!controller || !this.ui.levelClearedMesh || !this.ui.levelClearedMesh.visible) return null;
+    const tempMatrix = new THREE.Matrix4();
+    tempMatrix.identity().extractRotation(controller.matrixWorld);
+    this.controllerRaycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+    this.controllerRaycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+    const intersects = this.controllerRaycaster.intersectObject(this.ui.levelClearedMesh);
+    if (intersects.length > 0 && intersects[0].uv) {
+      return this.ui.checkLevelClearedHit(intersects[0].uv);
+    }
+    return null;
   }
 
   setupResize() {
@@ -136,11 +217,15 @@ class FloppyFlightGame {
     this.state = 'READY';
     sound.isGameOver = false;
     this.score = 0;
+    this.currentLevel = 1;
+    this.levelPipesCleared = 0;
     this.velocityY = 0;
     this.pitchAngle = 0;
+    this.baseForwardSpeed = 7.5;
     this.forwardSpeed = this.baseForwardSpeed;
     this.flapCooldown = 0;
     sound.setBGMVolume(0.38);
+    document.body.style.cursor = 'default';
 
     this.playerRig.position.set(0, 5.0, 0);
     this.pipeManager.reset(-18);
@@ -148,6 +233,7 @@ class FloppyFlightGame {
     this.ui.updateScore(0);
     this.ui.showReady(this.playerRig.position);
     this.ui.hideGameOver();
+    this.ui.hideLevelCleared();
   }
 
   startGame() {
@@ -155,6 +241,7 @@ class FloppyFlightGame {
     sound.isGameOver = false;
     sound.startBGM();
     this.ui.hideReady();
+    this.ui.hideLevelCleared();
   }
 
   triggerHaptic(strength = 0.6, durationMs = 80) {
@@ -193,6 +280,12 @@ class FloppyFlightGame {
       return;
     }
 
+    if (this.state === 'LEVEL_CLEARED') {
+      // Physical flap while on level cleared screen triggers Next Level
+      this.nextLevel();
+      return;
+    }
+
     if (this.state === 'GAMEOVER') {
       if (this.gameOverDelay <= 0) {
         sound.playFlap();
@@ -200,6 +293,50 @@ class FloppyFlightGame {
         this.resetToReady();
       }
     }
+  }
+
+  handleLevelCleared() {
+    this.state = 'LEVEL_CLEARED';
+    this.levelClearedSavedY = this.playerRig.position.y;
+    this.velocityY = 0;
+
+    sound.playFanfare();
+    this.triggerHaptic(0.85, 160);
+    this.ui.showLevelCleared(this.playerRig.position, this.currentLevel, this.score);
+  }
+
+  nextLevel() {
+    sound.init();
+    this.currentLevel++;
+    this.levelPipesCleared = 0;
+    document.body.style.cursor = 'default';
+
+    // Reposition pipe pool and enemies forward from current player Z
+    this.pipeManager.reset(this.playerRig.position.z - 18);
+    this.enemyBirds.reset();
+
+    this.ui.hideLevelCleared();
+
+    // Scale forward speed slightly with each level
+    this.baseForwardSpeed = 7.5 + Math.min((this.currentLevel - 1) * 0.4, 3.5);
+    this.forwardSpeed = this.baseForwardSpeed;
+
+    // Upward flap impulse to resume flight seamlessly
+    this.velocityY = this.flapImpulse * 0.8;
+    sound.playFlap();
+    sound.resumeBGM();
+    this.triggerHaptic(0.65, 80);
+
+    this.state = 'PLAYING';
+  }
+
+  quitGame() {
+    sound.init();
+    document.body.style.cursor = 'default';
+    this.currentLevel = 1;
+    this.levelPipesCleared = 0;
+    this.ui.hideLevelCleared();
+    this.resetToReady();
   }
 
   handleGameOver() {
@@ -268,6 +405,11 @@ class FloppyFlightGame {
       const hoverY = 5.0 + Math.sin(time * 0.003) * 0.2;
       this.playerRig.position.y = hoverY;
       this.pitchAngle = 0;
+    } else if (this.state === 'LEVEL_CLEARED') {
+      // Gentle hover bobbing while viewing victory screen
+      const hoverY = this.levelClearedSavedY + Math.sin(time * 0.003) * 0.12;
+      this.playerRig.position.y = hoverY;
+      this.pitchAngle = THREE.MathUtils.lerp(this.pitchAngle, 0, delta * 5.0);
     } else if (this.state === 'PLAYING') {
       // Forward motion along -Z
       this.playerRig.position.z -= this.forwardSpeed * delta;
@@ -284,10 +426,15 @@ class FloppyFlightGame {
       // Pipes update & score
       this.pipeManager.update(delta, this.playerRig.position.z, () => {
         this.score++;
+        this.levelPipesCleared++;
         this.forwardSpeed = this.baseForwardSpeed + Math.min(this.score * 0.1, 4.0);
         sound.playScore();
         this.triggerHaptic(0.4, 60);
         this.ui.updateScore(this.score);
+
+        if (this.levelPipesCleared >= this.pipesPerLevel) {
+          this.handleLevelCleared();
+        }
       });
 
       this.enemyBirds.update(

@@ -275,6 +275,93 @@ class SoundFX {
     } catch (e) {}
   }
 
+  // 5. Celebratory Level Cleared Brass Fanfare + Sparkly Chimes
+  playFanfare() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+
+    // Duck BGM during fanfare
+    this.setBGMVolume(0.08);
+
+    try {
+      const t = this.ctx.currentTime;
+
+      // Brass note helper: dual detuned oscillators (sawtooth + triangle) with brass filter sweep
+      const playBrassNote = (freq, startTime, duration, volume = 0.35) => {
+        const osc1 = this.ctx.createOscillator();
+        const osc2 = this.ctx.createOscillator();
+        osc1.type = 'sawtooth';
+        osc2.type = 'triangle';
+        osc1.frequency.setValueAtTime(freq, startTime);
+        osc2.frequency.setValueAtTime(freq * 1.005, startTime); // detune for rich ensemble
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(freq * 1.5, startTime);
+        filter.frequency.exponentialRampToValueAtTime(Math.min(freq * 5.2, 3400), startTime + 0.05);
+        filter.frequency.exponentialRampToValueAtTime(Math.min(freq * 2.2, 2200), startTime + duration);
+
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.001, startTime);
+        gain.gain.linearRampToValueAtTime(volume, startTime + 0.035);
+        gain.gain.setValueAtTime(volume * 0.85, startTime + duration * 0.7);
+        gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+
+        osc1.connect(filter);
+        osc2.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc1.start(startTime);
+        osc2.start(startTime);
+        osc1.stop(startTime + duration);
+        osc2.stop(startTime + duration);
+      };
+
+      // Sparkly chime bells helper
+      const playChime = (freq, startTime, duration = 0.45) => {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, startTime);
+
+        gain.gain.setValueAtTime(0.001, startTime);
+        gain.gain.linearRampToValueAtTime(0.18, startTime + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(startTime);
+        osc.stop(startTime + duration);
+      };
+
+      // 1. Triumphant flourish arpeggio (C5 - E5 - G5)
+      playBrassNote(523.25, t + 0.00, 0.16, 0.32); // C5
+      playBrassNote(659.25, t + 0.16, 0.16, 0.34); // E5
+      playBrassNote(783.99, t + 0.32, 0.18, 0.36); // G5
+
+      // 2. Big triumphant sustained major chord at C6
+      const chordTime = t + 0.50;
+      const chordDuration = 1.6;
+      playBrassNote(523.25, chordTime, chordDuration, 0.28);  // C5
+      playBrassNote(659.25, chordTime, chordDuration, 0.28);  // E5
+      playBrassNote(783.99, chordTime, chordDuration, 0.30);  // G5
+      playBrassNote(1046.50, chordTime, chordDuration, 0.36); // C6
+
+      // 3. Sparkly celebration bells / chimes cascade
+      playChime(1567.98, chordTime + 0.06, 0.5); // G6
+      playChime(2093.00, chordTime + 0.22, 0.5); // C7
+      playChime(2637.02, chordTime + 0.38, 0.5); // E7
+      playChime(3135.96, chordTime + 0.54, 0.6); // G7
+    } catch (e) {}
+
+    // Restore BGM after fanfare
+    setTimeout(() => {
+      if (!this.isGameOver) this.setBGMVolume(0.38);
+    }, 2300);
+  }
+
   // Announcer voice removed per user request
   playAnnouncer(score) {}
   playFight() {}

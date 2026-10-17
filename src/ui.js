@@ -8,6 +8,7 @@ export class UIManager {
     this.scoreBillboard = null;
     this.readyBillboard = null;
     this.gameOverBillboard = null;
+    this.levelClearedBillboard = null;
 
     this.currentScore = 0;
     this.bestScore = 0;
@@ -15,6 +16,7 @@ export class UIManager {
     this.createScoreDisplay();
     this.createReadyDisplay();
     this.createGameOverDisplay();
+    this.createLevelClearedDisplay();
   }
 
   createCanvasTexture(drawFn, width = 512, height = 256) {
@@ -318,10 +320,218 @@ export class UIManager {
     c.fillText('FLAP TO RETRY', w / 2, 302);
   }
 
+  createLevelClearedDisplay() {
+    const { texture, canvas, ctx } = this.createCanvasTexture((c, w, h) => {
+      this.drawLevelClearedCanvas(c, w, h, 1, 10);
+    }, 768, 480);
+
+    this.levelClearedCanvas = canvas;
+    this.levelClearedCtx = ctx;
+    this.levelClearedTexture = texture;
+
+    const mat = new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      side: THREE.DoubleSide
+    });
+
+    const geom = new THREE.PlaneGeometry(3.6, 2.25);
+    this.levelClearedMesh = new THREE.Mesh(geom, mat);
+    this.levelClearedMesh.visible = false;
+    this.scene.add(this.levelClearedMesh);
+  }
+
+  drawLevelClearedCanvas(c, w, h, level, score) {
+    c.clearRect(0, 0, w, h);
+
+    // Helper for celebratory stars
+    const drawStar = (cx, cy, spikes, outerRadius, innerRadius, color) => {
+      let rot = (Math.PI / 2) * 3;
+      let x = cx;
+      let y = cy;
+      const step = Math.PI / spikes;
+
+      c.beginPath();
+      c.moveTo(cx, cy - outerRadius);
+      for (let i = 0; i < spikes; i++) {
+        x = cx + Math.cos(rot) * outerRadius;
+        y = cy + Math.sin(rot) * outerRadius;
+        c.lineTo(x, y);
+        rot += step;
+
+        x = cx + Math.cos(rot) * innerRadius;
+        y = cy + Math.sin(rot) * innerRadius;
+        c.lineTo(x, y);
+        rot += step;
+      }
+      c.lineTo(cx, cy - outerRadius);
+      c.closePath();
+      c.fillStyle = color;
+      c.fill();
+      c.strokeStyle = '#ffffff';
+      c.lineWidth = 2.5;
+      c.stroke();
+    };
+
+    // 1. Warm rounded card background
+    c.fillStyle = 'rgba(255, 255, 255, 0.96)';
+    c.beginPath();
+    c.roundRect(24, 20, w - 48, h - 40, 38);
+    c.fill();
+
+    // Vibrant golden outer border
+    c.strokeStyle = '#fbc531';
+    c.lineWidth = 8;
+    c.stroke();
+
+    // Inner emerald festive border
+    c.strokeStyle = '#4cd137';
+    c.lineWidth = 3;
+    c.strokeRect(36, 32, w - 72, h - 64);
+
+    // 2. Victory Top Ribbon
+    c.fillStyle = '#fbc531';
+    c.beginPath();
+    c.roundRect(w / 2 - 170, 36, 340, 42, 21);
+    c.fill();
+    c.strokeStyle = '#ffffff';
+    c.lineWidth = 3;
+    c.stroke();
+
+    c.font = 'bold 22px "Arial Black", Impact, sans-serif';
+    c.fillStyle = '#2d3436';
+    c.textAlign = 'center';
+    c.fillText('★ ★ VICTORY ★ ★', w / 2, 65);
+
+    // Celebratory side stars
+    drawStar(w / 2 - 215, 57, 5, 22, 11, '#fffa65');
+    drawStar(w / 2 + 215, 57, 5, 22, 11, '#fffa65');
+
+    // 3. Main Title: "LEVEL X CLEARED!"
+    const titleText = `LEVEL ${level} CLEARED!`;
+    c.font = 'bold 54px "Arial Black", Impact, sans-serif';
+    c.textAlign = 'center';
+
+    // Drop shadow
+    c.strokeStyle = '#10ac84';
+    c.lineWidth = 12;
+    c.lineJoin = 'round';
+    c.strokeText(titleText, w / 2, 138);
+
+    // White outline
+    c.strokeStyle = '#ffffff';
+    c.lineWidth = 7;
+    c.strokeText(titleText, w / 2, 134);
+
+    // Emerald gradient fill
+    const titleGrad = c.createLinearGradient(0, 85, 0, 145);
+    titleGrad.addColorStop(0, '#55efc4');
+    titleGrad.addColorStop(1, '#00b894');
+    c.fillStyle = titleGrad;
+    c.fillText(titleText, w / 2, 134);
+
+    // 4. Stats Pill Box
+    c.fillStyle = 'rgba(47, 53, 66, 0.07)';
+    c.beginPath();
+    c.roundRect(w / 2 - 260, 160, 520, 82, 20);
+    c.fill();
+    c.strokeStyle = 'rgba(47, 53, 66, 0.12)';
+    c.lineWidth = 2;
+    c.stroke();
+
+    c.font = 'bold 26px "Arial Black", sans-serif';
+    c.fillStyle = '#2f3542';
+    c.fillText('🎉 10 PIPES COMPLETED! 🎉', w / 2, 196);
+
+    c.font = 'bold 22px Arial, sans-serif';
+    c.fillStyle = '#0984e3';
+    c.fillText(`TOTAL SCORE: ${score}`, w / 2, 228);
+
+    // 5. NEXT LEVEL Button (Primary, large and prominent)
+    // Box: x = 194, y = 265, w = 380, h = 66
+    const nextX = w / 2 - 190;
+    const nextY = 265;
+    const nextW = 380;
+    const nextH = 66;
+
+    // Button drop shadow
+    c.fillStyle = '#0d633e';
+    c.beginPath();
+    c.roundRect(nextX, nextY + 5, nextW, nextH, 33);
+    c.fill();
+
+    // Button body with bright green gradient
+    const nextGrad = c.createLinearGradient(0, nextY, 0, nextY + nextH);
+    nextGrad.addColorStop(0, '#2ed573');
+    nextGrad.addColorStop(1, '#10ac84');
+    c.fillStyle = nextGrad;
+    c.beginPath();
+    c.roundRect(nextX, nextY, nextW, nextH, 33);
+    c.fill();
+
+    // Crisp white border
+    c.strokeStyle = '#ffffff';
+    c.lineWidth = 4;
+    c.stroke();
+
+    // Next Level text
+    c.font = 'bold 28px "Arial Black", Impact, sans-serif';
+    c.fillStyle = '#ffffff';
+    c.fillText('▶ NEXT LEVEL', w / 2, nextY + 43);
+
+    // 6. QUIT GAME Button (Secondary, noticeably smaller to prevent accidental clicks)
+    // Box: x = 294, y = 372, w = 180, h = 38
+    const quitX = w / 2 - 90;
+    const quitY = 372;
+    const quitW = 180;
+    const quitH = 38;
+
+    // Subtle dark slate body
+    c.fillStyle = '#57606f';
+    c.beginPath();
+    c.roundRect(quitX, quitY, quitW, quitH, 19);
+    c.fill();
+
+    // Light muted border
+    c.strokeStyle = '#a4b0be';
+    c.lineWidth = 2;
+    c.stroke();
+
+    // Quit text
+    c.font = 'bold 16px Arial, sans-serif';
+    c.fillStyle = '#f1f2f6';
+    c.fillText('QUIT GAME', w / 2, quitY + 25);
+
+    // 7. Accessible shortcut hints at bottom
+    c.font = '13px Arial, sans-serif';
+    c.fillStyle = '#747d8c';
+    c.fillText('[Space / Enter] Next Level     [Q / Esc] Quit', w / 2, 442);
+  }
+
+  // Returns 'next', 'quit', or null based on normalized UV coordinates on levelClearedMesh
+  checkLevelClearedHit(uv) {
+    if (!uv) return null;
+    const u = uv.x;
+    const v = uv.y;
+
+    // Next Level button: centered horizontally (u ~ 0.25 to 0.75), vertically (v ~ 0.30 to 0.46)
+    if (u >= 0.24 && u <= 0.76 && v >= 0.30 && v <= 0.46) {
+      return 'next';
+    }
+
+    // Quit Game button: centered horizontally (u ~ 0.37 to 0.63), vertically (v ~ 0.14 to 0.23)
+    if (u >= 0.37 && u <= 0.63 && v >= 0.14 && v <= 0.23) {
+      return 'quit';
+    }
+
+    return null;
+  }
+
   showReady(playerPos) {
     this.readyMesh.visible = true;
     this.readyMesh.position.set(playerPos.x, playerPos.y, playerPos.z - 3.8);
     this.gameOverMesh.visible = false;
+    if (this.levelClearedMesh) this.levelClearedMesh.visible = false;
   }
 
   hideReady() {
@@ -340,9 +550,33 @@ export class UIManager {
 
     this.gameOverMesh.position.set(playerPos.x, playerPos.y, playerPos.z - 3.2);
     this.gameOverMesh.visible = true;
+    this.readyMesh.visible = false;
+    if (this.levelClearedMesh) this.levelClearedMesh.visible = false;
   }
 
   hideGameOver() {
     this.gameOverMesh.visible = false;
+  }
+
+  showLevelCleared(playerPos, level, score) {
+    this.drawLevelClearedCanvas(
+      this.levelClearedCtx,
+      this.levelClearedCanvas.width,
+      this.levelClearedCanvas.height,
+      level,
+      score
+    );
+    this.levelClearedTexture.needsUpdate = true;
+
+    this.levelClearedMesh.position.set(playerPos.x, playerPos.y, playerPos.z - 3.2);
+    this.levelClearedMesh.visible = true;
+    this.readyMesh.visible = false;
+    this.gameOverMesh.visible = false;
+  }
+
+  hideLevelCleared() {
+    if (this.levelClearedMesh) {
+      this.levelClearedMesh.visible = false;
+    }
   }
 }

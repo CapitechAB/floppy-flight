@@ -163,6 +163,12 @@ async function record10sGameplay() {
     const game = window.gameInstance;
     window.__flightStart = performance.now();
 
+    // Configure pipe spacing & speed for showcase in 10s recording
+    game.pipeManager.spacingZ = 13.5;
+    game.forwardSpeed = 16.0;
+    game.baseForwardSpeed = 16.0;
+    game.pipesPerLevel = 10;
+
     // Hook flap input to log wing flap whooshes
     const origFlap = game.handleFlapInput.bind(game);
     game.handleFlapInput = (side) => {
@@ -175,6 +181,7 @@ async function record10sGameplay() {
 
     // Track score for chime sound
     let prevScore = 0;
+    let fanfareLogged = false;
     setInterval(() => {
       if (game.score > prevScore) {
         prevScore = game.score;
@@ -183,6 +190,20 @@ async function record10sGameplay() {
           score: game.score,
           timeMs: performance.now() - window.__flightStart
         });
+      }
+      if (game.state === 'LEVEL_CLEARED' && !fanfareLogged) {
+        fanfareLogged = true;
+        window.__audioEvents.push({
+          type: 'fanfare',
+          timeMs: performance.now() - window.__flightStart
+        });
+
+        // Click NEXT LEVEL after 2.2 seconds of displaying victory screen
+        setTimeout(() => {
+          if (game.state === 'LEVEL_CLEARED') {
+            game.nextLevel();
+          }
+        }, 2200);
       }
     }, 16);
 
@@ -284,6 +305,43 @@ async function record10sGameplay() {
   }
   const chimePcm = createChimePcm();
 
+  // Synthetic triumphant brass fanfare + chimes
+  function createFanfarePcm() {
+    const durSec = 2.4;
+    const numSamples = Math.round(durSec * sampleRate);
+    const buf = Buffer.alloc(numSamples * 4);
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / sampleRate;
+      let s = 0;
+      // Arpeggio C5 -> E5 -> G5
+      if (t < 0.16) {
+        s += Math.sin(2 * Math.PI * 523.25 * t) * 0.38;
+      } else if (t < 0.32) {
+        s += Math.sin(2 * Math.PI * 659.25 * t) * 0.42;
+      } else if (t < 0.48) {
+        s += Math.sin(2 * Math.PI * 783.99 * t) * 0.46;
+      } else {
+        // Sustained triumphant major chord
+        const ct = t - 0.48;
+        const decay = Math.exp(-ct * 1.4);
+        s += Math.sin(2 * Math.PI * 523.25 * ct) * 0.22 * decay;
+        s += Math.sin(2 * Math.PI * 659.25 * ct) * 0.22 * decay;
+        s += Math.sin(2 * Math.PI * 783.99 * ct) * 0.25 * decay;
+        s += Math.sin(2 * Math.PI * 1046.50 * ct) * 0.32 * decay;
+        // Chime sparkles
+        if (ct > 0.08) s += Math.sin(2 * Math.PI * 1567.98 * (ct - 0.08)) * 0.18 * Math.exp(-(ct - 0.08) * 4);
+        if (ct > 0.24) s += Math.sin(2 * Math.PI * 2093.00 * (ct - 0.24)) * 0.20 * Math.exp(-(ct - 0.24) * 4);
+        if (ct > 0.40) s += Math.sin(2 * Math.PI * 2637.02 * (ct - 0.40)) * 0.22 * Math.exp(-(ct - 0.40) * 4);
+      }
+      const val = Math.max(-1.0, Math.min(1.0, s * 0.88));
+      const s16 = val < 0 ? Math.round(val * 32768) : Math.round(val * 32767);
+      buf.writeInt16LE(s16, i * 4);
+      buf.writeInt16LE(s16, i * 4 + 2);
+    }
+    return buf;
+  }
+  const fanfarePcm = createFanfarePcm();
+
   function mixBuffer(pcmBuffer, startSample, gain = 1.0) {
     if (!pcmBuffer || pcmBuffer.length === 0) return;
     const numPcmSamples = pcmBuffer.length / 4;
@@ -297,8 +355,11 @@ async function record10sGameplay() {
     }
   }
 
-  // Mix SFX events (flaps & chimes)
+  // Mix SFX events (flaps, chimes, and fanfare)
   let flapIndex = 0;
+  let fanfareStartSample = -1;
+  let fanfareEndSample = -1;
+
   for (const ev of audioEvents) {
     const startSample = Math.round((ev.timeMs / 1000) * sampleRate);
     if (startSample >= totalSamples) continue;
@@ -309,15 +370,21 @@ async function record10sGameplay() {
       mixBuffer(pcm, startSample, 0.85);
     } else if (ev.type === 'score') {
       mixBuffer(chimePcm, startSample, 0.75);
+    } else if (ev.type === 'fanfare') {
+      mixBuffer(fanfarePcm, startSample, 0.95);
+      fanfareStartSample = startSample;
+      fanfareEndSample = startSample + Math.round(2.3 * sampleRate);
     }
   }
 
-  // Mix clean looping BGM
+  // Mix clean looping BGM with fanfare ducking
   const bgmSamples = bgmPcm.length / 4;
   for (let i = 0; i < totalSamples; i++) {
     const bgmIdx = i % bgmSamples;
-    const l = (bgmPcm.readInt16LE(bgmIdx * 4 + 0) / 32768.0) * 0.36;
-    const r = (bgmPcm.readInt16LE(bgmIdx * 4 + 2) / 32768.0) * 0.36;
+    const isDucked = (i >= fanfareStartSample && i < fanfareEndSample);
+    const bgmVol = isDucked ? 0.08 : 0.36;
+    const l = (bgmPcm.readInt16LE(bgmIdx * 4 + 0) / 32768.0) * bgmVol;
+    const r = (bgmPcm.readInt16LE(bgmIdx * 4 + 2) / 32768.0) * bgmVol;
     masterL[i] += l;
     masterR[i] += r;
   }
