@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import cloudHappyUrl from './assets/cloud_happy.png';
+import cloudSmileUrl from './assets/cloud_smile.png';
 
 export class Environment {
   constructor(scene) {
@@ -156,7 +158,7 @@ export class Environment {
       roughness: 0.9
     });
     const soilMesh = new THREE.Mesh(soilGeom, soilMat);
-    soilMesh.position.set(0, -6, -100);
+    soilMesh.position.set(0, -6.05, -100);
     groundGroup.add(soilMesh);
 
     this.scene.add(groundGroup);
@@ -236,92 +238,63 @@ export class Environment {
     spawnIsland(27, 15, -220, 1.3);
   }
 
-  createSmilingFaceTexture() {
-    const canvas = document.createElement('canvas');
-    canvas.width = 128;
-    canvas.height = 128;
-    const ctx = canvas.getContext('2d');
-
-    // Eyes
-    ctx.fillStyle = '#2c3e50';
-    ctx.beginPath();
-    ctx.arc(38, 52, 9, 0, Math.PI * 2);
-    ctx.arc(90, 52, 9, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Eye catchlights (sparkles in eyes)
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(41, 49, 3.5, 0, Math.PI * 2);
-    ctx.arc(93, 49, 3.5, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Rosy pink blush cheeks
-    ctx.fillStyle = 'rgba(255, 107, 129, 0.55)';
-    ctx.beginPath();
-    ctx.ellipse(30, 68, 11, 7, 0, 0, Math.PI * 2);
-    ctx.ellipse(98, 68, 11, 7, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Cheerful cute smile
-    ctx.strokeStyle = '#2c3e50';
-    ctx.lineWidth = 5;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.arc(64, 64, 18, 0.15 * Math.PI, 0.85 * Math.PI, false);
-    ctx.stroke();
-
-    const tex = new THREE.CanvasTexture(canvas);
-    return tex;
-  }
-
   createSmilingClouds() {
-    const cloudMat = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      roughness: 0.25,
-      metalness: 0.0
-    });
+    const loader = new THREE.TextureLoader();
 
-    const faceTexture = this.createSmilingFaceTexture();
-    const faceMat = new THREE.MeshBasicMaterial({
-      map: faceTexture,
+    const happyTex = loader.load(cloudHappyUrl);
+    happyTex.magFilter = THREE.NearestFilter;
+    happyTex.minFilter = THREE.NearestFilter;
+    happyTex.colorSpace = THREE.SRGBColorSpace;
+
+    const smileTex = loader.load(cloudSmileUrl);
+    smileTex.magFilter = THREE.NearestFilter;
+    smileTex.minFilter = THREE.NearestFilter;
+    smileTex.colorSpace = THREE.SRGBColorSpace;
+
+    const happyMat = new THREE.SpriteMaterial({
+      map: happyTex,
       transparent: true,
-      side: THREE.DoubleSide
+      depthWrite: false
     });
 
-    for (let i = 0; i < 20; i++) {
-      const cloudGroup = new THREE.Group();
-      const puffGeom = new THREE.SphereGeometry(1.2, 8, 8);
-      puffGeom.scale(1.3, 0.85, 1.1);
+    const smileMat = new THREE.SpriteMaterial({
+      map: smileTex,
+      transparent: true,
+      depthWrite: false
+    });
 
-      const puffCount = 4 + Math.floor(Math.random() * 3);
-      for (let p = 0; p < puffCount; p++) {
-        const puff = new THREE.Mesh(puffGeom, cloudMat);
-        puff.position.set(
-          (p - puffCount / 2) * 1.5,
-          (Math.random() - 0.5) * 0.4,
-          (Math.random() - 0.5) * 0.5
-        );
-        const s = 1.0 + Math.random() * 0.7;
-        puff.scale.set(s, s * 0.85, s);
-        cloudGroup.add(puff);
-      }
+    // Create 32 charming smiling pixel-art cloud sprites
+    const cloudCount = 32;
+    for (let i = 0; i < cloudCount; i++) {
+      const isHappy = (i % 2 === 0);
+      const mat = isHappy ? happyMat.clone() : smileMat.clone();
+      const sprite = new THREE.Sprite(mat);
 
-      // Add cute smiling face on every 3rd cloud
-      if (i % 3 === 0) {
-        const facePlane = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.6), faceMat);
-        facePlane.position.set(0, 0, 1.25);
-        cloudGroup.add(facePlane);
-      }
+      const aspect = isHappy ? 1.62 : 1.56;
+      const isFar = (i % 3 === 0);
+      const baseScale = isFar ? (6.0 + Math.random() * 3.5) : (3.0 + Math.random() * 2.6);
+      const flip = (Math.random() > 0.4) ? 1 : -1;
+      sprite.scale.set(baseScale * aspect * flip, baseScale, 1.0);
 
-      const x = (Math.random() - 0.5) * 75;
-      const y = 8.5 + Math.random() * 15.0;
-      const z = -Math.random() * 220;
-      cloudGroup.position.set(x, y, z);
-      cloudGroup.userData = { speed: 0.6 + Math.random() * 0.9 };
+      // Flank distribution: frame the sky beautifully on both left and right flanks
+      const side = (i % 2 === 0) ? -1 : 1;
+      const x = side * (14 + Math.random() * (isFar ? 55 : 28));
+      const y = (isFar ? 10.5 : 7.0) + Math.random() * (isFar ? 14.0 : 9.5);
+      const z = -20 - Math.random() * 240;
 
-      this.scene.add(cloudGroup);
-      this.clouds.push(cloudGroup);
+      sprite.position.set(x, y, z);
+      sprite.userData = {
+        baseY: y,
+        speed: (isFar ? 0.35 : 0.75) + Math.random() * 0.5,
+        bobPhase: Math.random() * Math.PI * 2,
+        bobSpeed: 1.0 + Math.random() * 1.4,
+        bobAmp: 0.18 + Math.random() * 0.28,
+        isFar,
+        side
+      };
+
+      this.scene.add(sprite);
+      this.clouds.push(sprite);
     }
   }
 
@@ -478,13 +451,19 @@ export class Environment {
       }
     }
 
-    // Drift smiling clouds
+    // Drift smiling clouds with gentle floating bob
     for (let i = 0; i < this.clouds.length; i++) {
       const cloud = this.clouds[i];
       cloud.position.z += cloud.userData.speed * delta;
-      if (cloud.position.z > playerZ + 20) {
-        cloud.position.z = playerZ - 180 - Math.random() * 40;
-        cloud.position.x = (Math.random() - 0.5) * 75;
+      if (cloud.userData.bobPhase !== undefined) {
+        cloud.userData.bobPhase += delta * cloud.userData.bobSpeed;
+        cloud.position.y = cloud.userData.baseY + Math.sin(cloud.userData.bobPhase) * cloud.userData.bobAmp;
+      }
+      if (cloud.position.z > playerZ + 25) {
+        const isFar = cloud.userData.isFar;
+        const side = (Math.random() > 0.5) ? 1 : -1;
+        cloud.position.z = playerZ - 200 - Math.random() * 60;
+        cloud.position.x = side * (14 + Math.random() * (isFar ? 55 : 28));
       }
     }
 
