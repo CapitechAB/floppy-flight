@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace FloppyFlight.Flight
 {
@@ -60,10 +61,11 @@ namespace FloppyFlight.Flight
             bool leftFlapped = leftVy < flapVelocityThreshold;
             bool rightFlapped = rightVy < flapVelocityThreshold;
 
-            // Fallback controller triggers or keyboard space
+            // Fallback controller triggers or keyboard space (Input System; legacy Input is off).
+            var keyboard = Keyboard.current;
             bool triggerPressed = OVRInput.GetDown(OVRInput.Button.PrimaryIndexTrigger) ||
                                   OVRInput.GetDown(OVRInput.Button.SecondaryIndexTrigger) ||
-                                  Input.GetKeyDown(KeyCode.Space);
+                                  (keyboard != null && keyboard.spaceKey.wasPressedThisFrame);
 
             if ((leftFlapped || rightFlapped || triggerPressed) && flapCooldownTimer <= 0)
             {

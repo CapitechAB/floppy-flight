@@ -188,23 +188,33 @@ namespace FloppyFlight.Editor
 
             PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.Android, false);
             PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, new[] { GraphicsDeviceType.Vulkan });
-            SetActiveInputHandlerBoth();
+            EnsureInputSystemOnly();
 
             QualitySettings.vSyncCount = 0;
             QualitySettings.antiAliasing = 4;
         }
 
-        static void SetActiveInputHandlerBoth()
+        static void EnsureInputSystemOnly()
         {
+            // 0 = Input Manager (Old), 1 = Input System Package, 2 = Both.
+            // Both is unsupported on Android. The editor and the player then compile
+            // Meta XR types with different fields and the player build cannot serialize them.
+            // The value has to already be 1 when the editor starts; changing it here does not recompile.
             var settings = Resources.FindObjectsOfTypeAll<PlayerSettings>();
-            if (settings == null || settings.Length == 0) return;
+            if (settings == null || settings.Length == 0)
+                throw new InvalidOperationException("PlayerSettings was not found.");
             var serialized = new SerializedObject(settings[0]);
             var handler = serialized.FindProperty("activeInputHandler");
-            if (handler != null && handler.intValue != 2)
-            {
-                handler.intValue = 2;
-                serialized.ApplyModifiedPropertiesWithoutUndo();
-            }
+            if (handler == null)
+                throw new InvalidOperationException("PlayerSettings.activeInputHandler was not found.");
+            if (handler.intValue == 1)
+                return;
+
+            handler.intValue = 1;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            AssetDatabase.SaveAssets();
+            throw new InvalidOperationException(
+                "Active Input Handling was not Input System Package. ProjectSettings/ProjectSettings.asset now has activeInputHandler: 1. Restart the editor so ENABLE_INPUT_SYSTEM is applied, then rebuild. Do not use Both.");
         }
 
         static void SwitchToAndroid()
