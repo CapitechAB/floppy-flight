@@ -25,14 +25,15 @@ export class BirdAvatar {
     const beakGroup = new THREE.Group();
 
     // 4-sided pyramid cone with flat faceted shading matching the user screenshot exactly
-    const beakGeom = new THREE.ConeGeometry(0.12, 0.36, 4);
+    const beakGeom = new THREE.ConeGeometry(0.12, 0.44, 4);
     beakGeom.rotateX(-Math.PI / 2);
 
     const beakMat = new THREE.MeshStandardMaterial({
       color: 0xf39c12, // Rich golden cartoon yellow
       roughness: 0.28,
       metalness: 0.05,
-      flatShading: true // Crisp polygon facets: lit face on left, amber shadow face on right
+      flatShading: true, // Crisp polygon facets: lit face on left, amber shadow face on right
+      side: THREE.DoubleSide
     });
 
     const beakMesh = new THREE.Mesh(beakGeom, beakMat);
@@ -53,8 +54,8 @@ export class BirdAvatar {
     rightNostril.position.set(0.024, 0.032, 0.04);
     beakGroup.add(rightNostril);
 
-    // Positioned in lower view pointing forward/up toward the horizon
-    beakGroup.position.set(0, -0.16, -0.30);
+    // Positioned in lower view pointing forward/up toward the horizon, anchored firmly to bottom
+    beakGroup.position.set(0, -0.21, -0.30);
     beakGroup.rotation.x = THREE.MathUtils.degToRad(-8);
     beakGroup.rotation.y = 0;
 

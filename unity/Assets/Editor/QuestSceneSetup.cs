@@ -400,7 +400,7 @@ namespace FloppyFlight.Editor
 
             var beak = CreateBeak(materials);
             beak.transform.SetParent(centerEye, false);
-            beak.transform.localPosition = new Vector3(0f, -0.16f, 0.32f);
+            beak.transform.localPosition = new Vector3(0f, -0.21f, 0.32f);
             beak.transform.localRotation = Quaternion.Euler(10f, 0f, 0f);
 
             var leftWing = CreateWing(materials, true);
