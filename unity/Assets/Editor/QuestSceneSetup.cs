@@ -29,12 +29,13 @@ namespace FloppyFlight.Editor
         {
             EnsureFolders();
             var birdPrefab = BirdPrefabSetup.EnsurePrefab();
+            var purplePrefab = BirdPrefabSetup.EnsurePurplePrefab();
             if (File.Exists(Path.Combine(Application.dataPath, "Scenes/Main.unity")))
             {
                 var existing = AssetDatabase.LoadAssetAtPath<SceneAsset>(ScenePath);
                 if (existing != null)
                 {
-                    EnsureBirdSpawner(birdPrefab);
+                    EnsureBirdSpawner(birdPrefab, purplePrefab);
                     EditorBuildSettings.scenes = new[]
                     {
                         new EditorBuildSettingsScene(ScenePath, true)
@@ -48,7 +49,7 @@ namespace FloppyFlight.Editor
             CreateEnvironment(materials);
             var pipePrefab = CreatePipePrefab(materials);
             var flight = CreateFlightRig(materials);
-            CreateGameSystems(flight, pipePrefab, birdPrefab);
+            CreateGameSystems(flight, pipePrefab, birdPrefab, purplePrefab);
             CreateHud(flight.transform);
 
             EditorSceneManager.SaveScene(scene, ScenePath);
@@ -68,6 +69,8 @@ namespace FloppyFlight.Editor
             CreateFolder("Assets", "Art");
             CreateFolder("Assets/Art", "Bird");
             CreateFolder("Assets/Art/Bird", "Materials");
+            CreateFolder("Assets/Art/Bird", "Purple");
+            CreateFolder("Assets/Art/Bird/Purple", "Materials");
         }
 
         static void CreateFolder(string parent, string name)
@@ -522,13 +525,17 @@ namespace FloppyFlight.Editor
             return wing;
         }
 
-        static void EnsureBirdSpawner(GameObject birdPrefab)
+        static void EnsureBirdSpawner(GameObject birdPrefab, GameObject purplePrefab)
         {
-            if (birdPrefab == null) return;
+            if (birdPrefab == null && purplePrefab == null) return;
 
-            var guid = AssetDatabase.AssetPathToGUID(BirdPrefabSetup.PrefabPath);
+            var orangeGuid = AssetDatabase.AssetPathToGUID(BirdPrefabSetup.PrefabPath);
+            var purpleGuid = AssetDatabase.AssetPathToGUID(BirdPrefabSetup.PurplePrefabPath);
             var sceneFile = Path.Combine(Application.dataPath, "Scenes/Main.unity");
-            if (!string.IsNullOrEmpty(guid) && File.ReadAllText(sceneFile).Contains(guid))
+            var sceneText = File.ReadAllText(sceneFile);
+            var hasOrange = !string.IsNullOrEmpty(orangeGuid) && sceneText.Contains(orangeGuid);
+            var hasPurple = purplePrefab == null || (!string.IsNullOrEmpty(purpleGuid) && sceneText.Contains(purpleGuid));
+            if (hasOrange && hasPurple)
                 return;
 
             var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
@@ -543,7 +550,8 @@ namespace FloppyFlight.Editor
             if (spawner == null) spawner = game.gameObject.AddComponent<BirdSpawner>();
 
             var spawnerSo = new SerializedObject(spawner);
-            SetRef(spawnerSo, "birdPrefab", birdPrefab);
+            if (birdPrefab != null) SetRef(spawnerSo, "birdPrefab", birdPrefab);
+            if (purplePrefab != null) SetRef(spawnerSo, "purpleBirdPrefab", purplePrefab);
             spawnerSo.ApplyModifiedPropertiesWithoutUndo();
 
             var gameSo = new SerializedObject(game);
@@ -556,7 +564,7 @@ namespace FloppyFlight.Editor
             Debug.Log("[FloppyFlight] Added bird spawner to " + ScenePath);
         }
 
-        static void CreateGameSystems(GameObject flightRig, GameObject pipePrefab, GameObject birdPrefab)
+        static void CreateGameSystems(GameObject flightRig, GameObject pipePrefab, GameObject birdPrefab, GameObject purplePrefab)
         {
             var systems = new GameObject("GameSystems");
             var game = systems.AddComponent<GameManager>();
@@ -610,10 +618,11 @@ namespace FloppyFlight.Editor
             SetRef(spawnerSo, "pipePrefab", pipePrefab);
             spawnerSo.ApplyModifiedPropertiesWithoutUndo();
 
-            if (birdPrefab != null)
+            if (birdPrefab != null || purplePrefab != null)
             {
                 var birdSo = new SerializedObject(birds);
-                SetRef(birdSo, "birdPrefab", birdPrefab);
+                if (birdPrefab != null) SetRef(birdSo, "birdPrefab", birdPrefab);
+                if (purplePrefab != null) SetRef(birdSo, "purpleBirdPrefab", purplePrefab);
                 birdSo.ApplyModifiedPropertiesWithoutUndo();
             }
         }

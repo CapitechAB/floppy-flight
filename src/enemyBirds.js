@@ -51,7 +51,7 @@ function pushClearOfPipes(z) {
   return z;
 }
 
-function applyOutlineMaterial(root) {
+function applyOutlineMaterial(root, outlineColor) {
   root.traverse((obj) => {
     if (!obj.isMesh || !obj.material) return;
     const source = Array.isArray(obj.material) ? obj.material : [obj.material];
@@ -61,7 +61,7 @@ function applyOutlineMaterial(root) {
       replaced = true;
       // Inverted hull: front faces are the shell. DoubleSide would fill the bird black.
       const basic = new THREE.MeshBasicMaterial({
-        color: OUTLINE_COLOR,
+        color: outlineColor,
         side: THREE.FrontSide
       });
       basic.name = 'Bird_Outline';
@@ -73,14 +73,15 @@ function applyOutlineMaterial(root) {
   });
 }
 
-function buildProceduralTemplate() {
+function buildProceduralTemplate(kind) {
+  const purple = kind === 'purple';
   const root = new THREE.Group();
-  root.name = 'FloppyBird';
+  root.name = purple ? 'PurpleBird' : 'FloppyBird';
 
-  const bodyMat = new THREE.MeshStandardMaterial({ color: 0xf07a2a, roughness: 0.55 });
-  const bellyMat = new THREE.MeshStandardMaterial({ color: 0xfcae7c, roughness: 0.55 });
-  const beakMat = new THREE.MeshStandardMaterial({ color: 0xf9a23a, roughness: 0.4 });
-  const wingMat = new THREE.MeshStandardMaterial({ color: 0xee7e68, roughness: 0.5 });
+  const bodyMat = new THREE.MeshStandardMaterial({ color: purple ? 0xa58ad9 : 0xf07a2a, roughness: 0.55 });
+  const bellyMat = new THREE.MeshStandardMaterial({ color: purple ? 0xebc7e6 : 0xfcae7c, roughness: 0.55 });
+  const beakMat = new THREE.MeshStandardMaterial({ color: purple ? 0xf7a632 : 0xf9a23a, roughness: 0.4 });
+  const wingMat = new THREE.MeshStandardMaterial({ color: purple ? 0x6d4fb3 : 0xee7e68, roughness: 0.5 });
   const eyeMat = new THREE.MeshStandardMaterial({ color: 0xfafafa, roughness: 0.3 });
   const pupilMat = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.4 });
 
@@ -124,7 +125,7 @@ function buildProceduralTemplate() {
   shellGeo.scale(1.08, 0.98, 1.32);
   const shell = new THREE.Mesh(
     shellGeo,
-    new THREE.MeshBasicMaterial({ color: OUTLINE_COLOR, side: THREE.BackSide })
+    new THREE.MeshBasicMaterial({ color: purple ? 0x2c1a45 : OUTLINE_COLOR, side: THREE.BackSide })
   );
   shell.name = 'OutlineShell';
   root.add(shell);
@@ -137,56 +138,65 @@ export class EnemyBirdManager {
   constructor(scene) {
     this.scene = scene;
     this.pool = [];
-    this.template = null;
-    this.clip = null;
+    this.variants = [];
+    this.pendingLoads = 2;
     this.ready = false;
     this.source = null;
     this.spawnTimer = INITIAL_DELAY;
     this.spawnCount = 0;
-    this.loadModel();
+    const base = import.meta.env.BASE_URL;
+    this.loadVariant('orange', `${base}models/FloppyBird.glb`, 0x1a0e0a);
+    this.loadVariant('purple', `${base}models/PurpleBird.glb`, 0x2c1a45);
   }
 
-  loadModel() {
+  loadVariant(kind, url, outlineColor) {
     const loader = new GLTFLoader();
-    const url = `${import.meta.env.BASE_URL}models/FloppyBird.glb`;
     loader.load(
       url,
       (gltf) => {
         const template = gltf.scene;
-        applyOutlineMaterial(template);
+        applyOutlineMaterial(template, outlineColor);
         template.scale.setScalar(BIRD_SCALE);
-        this.clip = gltf.animations.find((clip) => clip.name === 'Flap') || gltf.animations[0] || null;
-        this.finishTemplate(template, 'glb');
+        const clip = gltf.animations.find((entry) => entry.name === 'Flap') || gltf.animations[0] || null;
+        this.variants.push({ kind, template, clip, source: 'glb' });
+        this.finishVariant();
       },
       undefined,
       (error) => {
-        console.error('FloppyBird GLB failed to load, using a procedural bird.', error);
-        this.clip = null;
-        this.finishTemplate(buildProceduralTemplate(), 'procedural');
+        console.error(kind + ' bird GLB failed to load, using a procedural bird.', error);
+        this.variants.push({
+          kind,
+          template: buildProceduralTemplate(kind),
+          clip: null,
+          source: 'procedural'
+        });
+        this.finishVariant();
       }
     );
   }
 
-  finishTemplate(template, source) {
-    if (this.ready) return;
-    this.template = template;
-    this.source = source;
-    for (let i = 0; i < POOL_SIZE; i++) {
-      this.pool.push(this.createInstance());
+  finishVariant() {
+    this.pendingLoads -= 1;
+    if (this.pendingLoads > 0 || this.ready) return;
+    const share = this.variants.length > 1 ? Math.floor(POOL_SIZE / this.variants.length) : POOL_SIZE;
+    for (let v = 0; v < this.variants.length; v++) {
+      const count = v === this.variants.length - 1 ? POOL_SIZE - share * v : share;
+      for (let i = 0; i < count; i++) this.pool.push(this.createInstance(this.variants[v]));
     }
+    this.source = this.variants.every((variant) => variant.source === 'glb') ? 'glb' : 'procedural';
     this.ready = true;
   }
 
-  createInstance() {
-    const model = cloneModel(this.template);
+  createInstance(variant) {
+    const model = cloneModel(variant.template);
     model.visible = false;
-    model.name = 'FloppyBirdObstacle';
+    model.name = variant.kind === 'purple' ? 'PurpleBirdObstacle' : 'FloppyBirdObstacle';
     this.scene.add(model);
 
     const mixer = new THREE.AnimationMixer(model);
     let action = null;
-    if (this.clip) {
-      action = mixer.clipAction(this.clip);
+    if (variant.clip) {
+      action = mixer.clipAction(variant.clip);
       action.setLoop(THREE.LoopRepeat, Infinity);
       action.play();
     }
@@ -195,6 +205,7 @@ export class EnemyBirdManager {
       model,
       mixer,
       action,
+      kind: variant.kind,
       alive: false,
       travel: new THREE.Vector3(),
       baseY: 0,
@@ -244,12 +255,17 @@ export class EnemyBirdManager {
     this.spawnTimer -= delta;
     if (this.spawnTimer > 0) return;
     if (this.trySpawn(playerZ, playerSpeed, pipeManager)) {
-      this.spawnTimer = rand(MIN_INTERVAL, MAX_INTERVAL);
+      // The second bird follows quickly so both colours are on screen in a 10 s recording.
+      this.spawnTimer = this.spawnCount === 1 ? 1.35 : rand(MIN_INTERVAL, MAX_INTERVAL);
     }
   }
 
   trySpawn(playerZ, playerSpeed, pipeManager) {
-    const bird = this.pool.find((entry) => !entry.alive);
+    let kind = 'orange';
+    if (this.spawnCount === 1) kind = 'purple';
+    else if (this.spawnCount > 1) kind = Math.random() < 0.5 ? 'purple' : 'orange';
+    let bird = this.pool.find((entry) => !entry.alive && entry.kind === kind);
+    if (!bird) bird = this.pool.find((entry) => !entry.alive);
     if (!bird) return false;
 
     const toPositiveX = Math.random() > 0.5;

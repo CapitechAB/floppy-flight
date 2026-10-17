@@ -11,6 +11,7 @@ namespace FloppyFlight.Obstacles
     {
         [Header("Pool")]
         [SerializeField] private GameObject birdPrefab;
+        [SerializeField] private GameObject purpleBirdPrefab;
         [SerializeField] private int poolSize = 4;
         [SerializeField] private int maxAlive = 2;
 
@@ -42,7 +43,7 @@ namespace FloppyFlight.Obstacles
 
         public void UpdateBirds(float playerZ)
         {
-            if (birdPrefab == null) return;
+            if (birdPrefab == null && purpleBirdPrefab == null) return;
             InitializePool();
 
             var dt = Time.deltaTime;
@@ -72,12 +73,29 @@ namespace FloppyFlight.Obstacles
 
         void InitializePool()
         {
-            if (birdPrefab == null || pool.Count > 0) return;
+            if (pool.Count > 0) return;
+            if (birdPrefab == null && purpleBirdPrefab == null) return;
 
-            for (var i = 0; i < poolSize; i++)
+            var both = birdPrefab != null && purpleBirdPrefab != null;
+            var orangeCount = both ? poolSize / 2 : (birdPrefab != null ? poolSize : 0);
+            var purpleCount = both ? poolSize - orangeCount : (purpleBirdPrefab != null ? poolSize : 0);
+            AddToPool(birdPrefab, orangeCount);
+            AddToPool(purpleBirdPrefab, purpleCount);
+        }
+
+        void AddToPool(GameObject prefab, int count)
+        {
+            if (prefab == null || count <= 0) return;
+            for (var i = 0; i < count; i++)
             {
-                var obj = Instantiate(birdPrefab, transform);
+                var obj = Instantiate(prefab, transform);
                 var bird = obj.GetComponent<FloppyBird>();
+                if (bird == null)
+                {
+                    Debug.LogError("[FloppyFlight] Bird prefab is missing FloppyBird: " + prefab.name);
+                    Destroy(obj);
+                    continue;
+                }
                 obj.SetActive(false);
                 pool.Add(bird);
             }
@@ -85,15 +103,8 @@ namespace FloppyFlight.Obstacles
 
         bool TrySpawn(float playerZ)
         {
-            FloppyBird bird = null;
-            for (var i = 0; i < pool.Count; i++)
-            {
-                if (!pool[i].gameObject.activeSelf)
-                {
-                    bird = pool[i];
-                    break;
-                }
-            }
+            var preferPurple = Random.value < 0.5f;
+            var bird = TakeInactive(preferPurple) ?? TakeInactive(!preferPurple);
             if (bird == null) return false;
 
             var z = AlignBetweenPipes(playerZ - Random.Range(minAhead, maxAhead));
@@ -109,6 +120,18 @@ namespace FloppyFlight.Obstacles
                 y,
                 Random.Range(0.28f, 0.55f));
             return true;
+        }
+
+        FloppyBird TakeInactive(bool purple)
+        {
+            for (var i = 0; i < pool.Count; i++)
+            {
+                var bird = pool[i];
+                if (bird == null || bird.gameObject.activeSelf) continue;
+                var isPurple = bird.gameObject.name.IndexOf("Purple", System.StringComparison.Ordinal) >= 0;
+                if (isPurple == purple) return bird;
+            }
+            return null;
         }
 
         float PickAltitude()

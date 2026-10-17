@@ -15,9 +15,18 @@ namespace FloppyFlight.Editor
     {
         public const string ModelPath = "Assets/Art/Bird/FloppyBird.fbx";
         public const string PrefabPath = "Assets/Prefabs/FloppyBird.prefab";
+        public const string PurpleModelPath = "Assets/Art/Bird/PurpleBird.fbx";
+        public const string PurplePrefabPath = "Assets/Prefabs/PurpleBird.prefab";
         const string ControllerPath = "Assets/Art/Bird/FloppyBird.controller";
+        const string PurpleControllerPath = "Assets/Art/Bird/PurpleBird.controller";
         const float BirdScale = 4f;
         const float BodyRadius = 0.12f;
+
+        enum BirdKind
+        {
+            Orange,
+            Purple
+        }
 
         public static readonly string[] MaterialNames =
         {
@@ -32,17 +41,45 @@ namespace FloppyFlight.Editor
             "Bird_Outline"
         };
 
+        public static readonly string[] PurpleMaterialNames =
+        {
+            "Bird_Body",
+            "Bird_Belly",
+            "Bird_WingCovert",
+            "Bird_Wing",
+            "Bird_Beak",
+            "Bird_Pupil",
+            "Bird_Eye",
+            "Bird_Feet",
+            "Bird_Outline"
+        };
+
         public static string MaterialPath(string materialName)
         {
             return "Assets/Art/Bird/Materials/" + materialName + ".mat";
         }
 
+        public static string PurpleMaterialPath(string materialName)
+        {
+            return "Assets/Art/Bird/Purple/Materials/" + materialName + ".mat";
+        }
+
         public static GameObject EnsurePrefab()
         {
-            EnsureMaterials();
-            var existing = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
+            return Ensure(BirdKind.Orange);
+        }
+
+        public static GameObject EnsurePurplePrefab()
+        {
+            return Ensure(BirdKind.Purple);
+        }
+
+        static GameObject Ensure(BirdKind kind)
+        {
+            EnsureMaterials(kind);
+            var existing = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPathOf(kind));
             if (IsReady(existing)) return existing;
-            return BuildPrefab();
+            return BuildPrefab(kind);
         }
 
         static bool IsReady(GameObject prefab)
@@ -57,18 +94,18 @@ namespace FloppyFlight.Editor
             return body != null && body.isKinematic;
         }
 
-        static GameObject BuildPrefab()
+        static GameObject BuildPrefab(BirdKind kind)
         {
-            var model = LoadModel();
+            var model = LoadModel(kind);
             if (model == null)
             {
-                Debug.LogError("[FloppyFlight] Bird model missing at " + ModelPath);
+                Debug.LogError("[FloppyFlight] Bird model missing at " + ModelPathOf(kind));
                 return null;
             }
 
-            var controller = EnsureController();
+            var controller = EnsureController(kind);
             var instance = (GameObject)PrefabUtility.InstantiatePrefab(model);
-            instance.name = "FloppyBird";
+            instance.name = kind == BirdKind.Purple ? "PurpleBird" : "FloppyBird";
             instance.transform.localScale = Vector3.one * BirdScale;
 
             var animator = instance.GetComponent<Animator>();
@@ -94,31 +131,34 @@ namespace FloppyFlight.Editor
             if (instance.GetComponent<Obstacles.FloppyBird>() == null)
                 instance.AddComponent<Obstacles.FloppyBird>();
 
-            AssignProjectMaterials(instance);
+            AssignProjectMaterials(instance, kind);
 
-            var prefab = PrefabUtility.SaveAsPrefabAsset(instance, PrefabPath);
+            var prefabPath = PrefabPathOf(kind);
+            var prefab = PrefabUtility.SaveAsPrefabAsset(instance, prefabPath);
             UnityEngine.Object.DestroyImmediate(instance);
-            Debug.Log("[FloppyFlight] Created " + PrefabPath);
+            Debug.Log("[FloppyFlight] Created " + prefabPath);
             return prefab;
         }
 
-        static GameObject LoadModel()
+        static GameObject LoadModel(BirdKind kind)
         {
-            var model = AssetDatabase.LoadAssetAtPath<GameObject>(ModelPath);
+            var modelPath = ModelPathOf(kind);
+            var model = AssetDatabase.LoadAssetAtPath<GameObject>(modelPath);
             if (model != null) return model;
-            AssetDatabase.ImportAsset(ModelPath, ImportAssetOptions.ForceUpdate);
-            return AssetDatabase.LoadAssetAtPath<GameObject>(ModelPath);
+            AssetDatabase.ImportAsset(modelPath, ImportAssetOptions.ForceUpdate);
+            return AssetDatabase.LoadAssetAtPath<GameObject>(modelPath);
         }
 
-        static RuntimeAnimatorController EnsureController()
+        static RuntimeAnimatorController EnsureController(BirdKind kind)
         {
-            var existing = AssetDatabase.LoadAssetAtPath<AnimatorController>(ControllerPath);
+            var controllerPath = ControllerPathOf(kind);
+            var existing = AssetDatabase.LoadAssetAtPath<AnimatorController>(controllerPath);
             if (existing != null && ControllerHasFlap(existing)) return existing;
 
-            var clip = LoadFlapClip();
+            var clip = LoadFlapClip(kind);
             if (clip == null)
             {
-                Debug.LogError("[FloppyFlight] FloppyBird.fbx has no Flap animation clip.");
+                Debug.LogError("[FloppyFlight] " + ModelPathOf(kind) + " has no Flap animation clip.");
                 return existing;
             }
 
@@ -127,14 +167,14 @@ namespace FloppyFlight.Editor
             {
                 settings.loopTime = true;
                 AnimationUtility.SetAnimationClipSettings(clip, settings);
-                clip = LoadFlapClip();
+                clip = LoadFlapClip(kind);
                 if (clip == null) return existing;
             }
 
             if (existing != null)
-                AssetDatabase.DeleteAsset(ControllerPath);
+                AssetDatabase.DeleteAsset(controllerPath);
 
-            var controller = AnimatorController.CreateAnimatorControllerAtPath(ControllerPath);
+            var controller = AnimatorController.CreateAnimatorControllerAtPath(controllerPath);
             var machine = controller.layers[0].stateMachine;
             var state = machine.AddState("Flap");
             state.motion = clip;
@@ -158,9 +198,9 @@ namespace FloppyFlight.Editor
             return false;
         }
 
-        static AnimationClip LoadFlapClip()
+        static AnimationClip LoadFlapClip(BirdKind kind)
         {
-            var assets = AssetDatabase.LoadAllAssetsAtPath(ModelPath);
+            var assets = AssetDatabase.LoadAllAssetsAtPath(ModelPathOf(kind));
             AnimationClip fallback = null;
             for (var i = 0; i < assets.Length; i++)
             {
@@ -172,7 +212,7 @@ namespace FloppyFlight.Editor
             return fallback;
         }
 
-        static void AssignProjectMaterials(GameObject instance)
+        static void AssignProjectMaterials(GameObject instance, BirdKind kind)
         {
             var renderers = instance.GetComponentsInChildren<Renderer>(true);
             for (var r = 0; r < renderers.Length; r++)
@@ -182,7 +222,7 @@ namespace FloppyFlight.Editor
                 var changed = false;
                 for (var i = 0; i < slots.Length; i++)
                 {
-                    var project = AssetDatabase.LoadAssetAtPath<Material>(MaterialPath(SlotName(slots[i])));
+                    var project = AssetDatabase.LoadAssetAtPath<Material>(MaterialPathOf(kind, SlotName(slots[i])));
                     if (project == null || slots[i] == project) continue;
                     slots[i] = project;
                     changed = true;
@@ -205,33 +245,34 @@ namespace FloppyFlight.Editor
             return name;
         }
 
-        static void EnsureMaterials()
+        static void EnsureMaterials(BirdKind kind)
         {
+            var names = NamesOf(kind);
             var rebuilt = false;
-            for (var i = 0; i < MaterialNames.Length; i++)
+            for (var i = 0; i < names.Length; i++)
             {
-                var name = MaterialNames[i];
-                var path = MaterialPath(name);
+                var name = names[i];
+                var path = MaterialPathOf(kind, name);
                 if (AssetDatabase.LoadAssetAtPath<Material>(path) != null) continue;
 
-                var absolute = Path.Combine(Application.dataPath, "Art/Bird/Materials/" + name + ".mat");
+                var absolute = AbsoluteMaterialPath(kind, name);
                 if (File.Exists(absolute))
                 {
                     File.Delete(absolute);
                     AssetDatabase.Refresh();
                 }
 
-                var material = CreateFallbackMaterial(name);
+                var material = CreateFallbackMaterial(kind, name);
                 if (material == null) continue;
                 AssetDatabase.CreateAsset(material, path);
                 rebuilt = true;
             }
 
             if (rebuilt)
-                AssetDatabase.ImportAsset(ModelPath, ImportAssetOptions.ForceUpdate);
+                AssetDatabase.ImportAsset(ModelPathOf(kind), ImportAssetOptions.ForceUpdate);
         }
 
-        static Material CreateFallbackMaterial(string name)
+        static Material CreateFallbackMaterial(BirdKind kind, string name)
         {
             if (name == "Bird_Outline")
             {
@@ -243,7 +284,9 @@ namespace FloppyFlight.Editor
                 }
 
                 var outline = new Material(shader) { name = name };
-                outline.color = new Color(0.102f, 0.055f, 0.039f, 1f);
+                outline.color = kind == BirdKind.Purple
+                    ? new Color(0.025187f, 0.010330f, 0.059511f, 1f)
+                    : new Color(0.102f, 0.055f, 0.039f, 1f);
                 outline.renderQueue = 2001;
                 return outline;
             }
@@ -255,7 +298,7 @@ namespace FloppyFlight.Editor
                 return null;
             }
 
-            var color = FallbackColor(name);
+            var color = FallbackColor(kind, name);
             var material = new Material(standard) { name = name, color = color };
             material.SetFloat("_Glossiness", 0.3f);
             material.SetFloat("_Metallic", 0f);
@@ -267,8 +310,24 @@ namespace FloppyFlight.Editor
             return material;
         }
 
-        static Color FallbackColor(string name)
+        static Color FallbackColor(BirdKind kind, string name)
         {
+            if (kind == BirdKind.Purple)
+            {
+                switch (name)
+                {
+                    case "Bird_Body": return Hex(0xA5, 0x8A, 0xD9);
+                    case "Bird_Belly": return Hex(0xEB, 0xC7, 0xE6);
+                    case "Bird_WingCovert": return Hex(0x92, 0x77, 0xCE);
+                    case "Bird_Wing": return Hex(0x6D, 0x4F, 0xB3);
+                    case "Bird_Beak": return Hex(0xF7, 0xA6, 0x32);
+                    case "Bird_Pupil": return Hex(0x12, 0x0D, 0x16);
+                    case "Bird_Eye": return Hex(0xFF, 0xFF, 0xFF);
+                    case "Bird_Feet": return Hex(0xF0, 0x90, 0x2E);
+                    default: return Color.white;
+                }
+            }
+
             switch (name)
             {
                 case "Bird_Body": return Hex(0xF0, 0x7A, 0x2A);
@@ -281,6 +340,39 @@ namespace FloppyFlight.Editor
                 case "Bird_Wing": return Hex(0xEE, 0x7E, 0x68);
                 default: return Color.white;
             }
+        }
+
+        static string ModelPathOf(BirdKind kind)
+        {
+            return kind == BirdKind.Purple ? PurpleModelPath : ModelPath;
+        }
+
+        static string PrefabPathOf(BirdKind kind)
+        {
+            return kind == BirdKind.Purple ? PurplePrefabPath : PrefabPath;
+        }
+
+        static string ControllerPathOf(BirdKind kind)
+        {
+            return kind == BirdKind.Purple ? PurpleControllerPath : ControllerPath;
+        }
+
+        static string[] NamesOf(BirdKind kind)
+        {
+            return kind == BirdKind.Purple ? PurpleMaterialNames : MaterialNames;
+        }
+
+        static string MaterialPathOf(BirdKind kind, string materialName)
+        {
+            return kind == BirdKind.Purple ? PurpleMaterialPath(materialName) : MaterialPath(materialName);
+        }
+
+        static string AbsoluteMaterialPath(BirdKind kind, string materialName)
+        {
+            var folder = kind == BirdKind.Purple
+                ? "Art/Bird/Purple/Materials/"
+                : "Art/Bird/Materials/";
+            return Path.Combine(Application.dataPath, folder + materialName + ".mat");
         }
 
         static Color Hex(int r, int g, int b)
