@@ -65,6 +65,18 @@ class FloppyFlightGame {
     vrBtn.addEventListener('click', () => sound.init());
     document.body.appendChild(vrBtn);
 
+    const updateVrBtnLayout = () => {
+      if (vrBtn.textContent && (vrBtn.textContent.includes('NOT SUPPORTED') || vrBtn.textContent.includes('NOT AVAILABLE') || vrBtn.textContent.includes('NOT ALLOWED'))) {
+        vrBtn.classList.add('vr-unsupported');
+      } else {
+        vrBtn.classList.remove('vr-unsupported');
+      }
+      vrBtn.style.width = 'auto';
+    };
+    const vrObserver = new MutationObserver(updateVrBtnLayout);
+    vrObserver.observe(vrBtn, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['style'] });
+    updateVrBtnLayout();
+
     // WebXR controllers
     this.controller0 = this.renderer.xr.getController(0);
     this.controller1 = this.renderer.xr.getController(1);

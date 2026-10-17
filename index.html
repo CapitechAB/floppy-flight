@@ -67,6 +67,16 @@
       bottom: 30px !important;
       left: 50% !important;
       transform: translateX(-50%) !important;
+      width: auto !important;
+      width: max-content !important;
+      min-width: 240px !important;
+      max-width: 90vw !important;
+      box-sizing: border-box !important;
+      white-space: nowrap !important;
+      text-align: center !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
       background: linear-gradient(135deg, #0984e3 0%, #00d2d3 100%) !important;
       color: #ffffff !important;
       font-weight: 900 !important;
@@ -85,6 +95,12 @@
     #vr-button:hover {
       transform: translateX(-50%) scale(1.06) !important;
       box-shadow: 0 8px 35px rgba(0, 210, 211, 0.85) !important;
+    }
+
+    #vr-button.vr-unsupported {
+      min-width: 330px !important;
+      cursor: default !important;
+      opacity: 0.9 !important;
     }
   </style>
 </head>
