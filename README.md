@@ -69,6 +69,7 @@ Open `unity/` in that editor with Android Build Support (SDK, NDK, OpenJDK). Pac
 | Scripting backend | IL2CPP, ARM64 only |
 | Min / target API | 32 / 34 (Android 14). New Horizon apps created after 1 March 2026 must target API 34. |
 | Graphics | Vulkan only, linear color space, multithreaded rendering |
+| Input | Input System Package only (`activeInputHandler: 1` in `ProjectSettings/ProjectSettings.asset`). Both is unsupported on Android and breaks Meta XR serialization. `com.unity.inputsystem` 1.20.1 is in the manifest. |
 | XR | OpenXR loader, Meta Quest Support, Oculus Touch / Touch Pro / Touch Plus profiles, Single Pass Instanced (Vulkan multiview). Symmetric projection is off so Quest 1 in the default device list cannot fail validation. Latency optimization is Prioritize Input Polling. |
 | Devices | Quest 2, Quest Pro, Quest 3, Quest 3S |
 | Activity | Game Activity (`AndroidApplicationEntry.GameActivity` only) |
