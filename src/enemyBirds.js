@@ -256,7 +256,7 @@ export class EnemyBirdManager {
     if (this.spawnTimer > 0) return;
     if (this.trySpawn(playerZ, playerSpeed, pipeManager)) {
       // The second bird follows quickly so both colours are on screen in a 10 s recording.
-      this.spawnTimer = this.spawnCount === 1 ? 2.3 : rand(MIN_INTERVAL, MAX_INTERVAL);
+      this.spawnTimer = this.spawnCount === 1 ? 1.35 : rand(MIN_INTERVAL, MAX_INTERVAL);
     }
   }
 
