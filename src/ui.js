@@ -68,30 +68,38 @@ export class UIManager {
     ctx.lineWidth = 5;
     ctx.stroke();
 
-    // VR label tag
+    // SCORE: label tag
+    const tagW = 135;
+    const tagH = 46;
+    const tagX = 32;
+    const tagY = (h - tagH) / 2;
+
     ctx.fillStyle = '#0984e3';
     ctx.beginPath();
-    ctx.roundRect(32, 28, 60, 32, 10);
+    ctx.roundRect(tagX, tagY, tagW, tagH, 12);
     ctx.fill();
     ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.5;
     ctx.stroke();
 
-    ctx.font = 'bold 20px "Arial Black", Impact, sans-serif';
+    ctx.font = 'bold 22px "Arial Black", Impact, sans-serif';
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('VR', 62, 44);
+    ctx.fillText('SCORE: ', tagX + tagW / 2, tagY + tagH / 2 + 1);
 
     // Retro Arcade Score Counter (formatted like '00', '05', etc.)
     const scoreStr = score < 10 ? `0${score}` : `${score}`;
-    ctx.font = 'bold 72px "Arial Black", Impact, sans-serif';
+    ctx.font = 'bold 68px "Arial Black", Impact, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
+    const numX = w / 2 + 75;
+    const numY = h / 2;
+
     // Dark drop shadow
     ctx.fillStyle = '#2d3436';
-    ctx.fillText(scoreStr, w / 2 + 35, h / 2 + 5);
+    ctx.fillText(scoreStr, numX, numY + 4);
 
     // Warm orange-yellow gradient fill
     const grad = ctx.createLinearGradient(0, 20, 0, h - 20);
@@ -99,12 +107,12 @@ export class UIManager {
     grad.addColorStop(0.5, '#fbc531');
     grad.addColorStop(1, '#e17055');
     ctx.fillStyle = grad;
-    ctx.fillText(scoreStr, w / 2 + 35, h / 2 + 2);
+    ctx.fillText(scoreStr, numX, numY + 1);
 
     // Crisp white outline
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2.5;
-    ctx.strokeText(scoreStr, w / 2 + 35, h / 2 + 2);
+    ctx.strokeText(scoreStr, numX, numY + 1);
   }
 
   updateScore(score) {
