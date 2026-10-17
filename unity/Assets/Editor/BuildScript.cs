@@ -4,6 +4,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Reflection;
 using System.Text;
+using System.Xml;
 using UnityEditor;
 using UnityEditor.Android;
 using UnityEditor.Build;
@@ -300,6 +301,9 @@ namespace FloppyFlight.Editor
             EnableInteractionProfiles(group);
             EnableMetaXrFeatureGroup(group);
             DisableOvrSystemKeyboard();
+            // Meta XR Core 207 maps DeviceType.VRGlasses to the manifest token "stanley".
+            // The Horizon dashboard rejects that token. Quest 1 is "quest" and is also rejected.
+            ApplyOvrTargetDevices();
 
             var openXr = OpenXRSettings.GetSettingsForBuildTargetGroup(group);
             if (openXr == null)
@@ -311,7 +315,7 @@ namespace FloppyFlight.Editor
             EditorUtility.SetDirty(openXr);
             AssetDatabase.SaveAssets();
 
-            Debug.Log("[FloppyFlight] OpenXR Android loader enabled. Meta Quest Support and the Meta XR feature group are on. Meta's build step keeps OVRPlugin's libopenxr_loader.so and drops Unity's openxr_loader.aar. Targets are Quest 2, Quest Pro, Quest 3, and Quest 3S. Stereo mode is Single Pass Instanced (Vulkan multiview). Oculus Touch, Touch Pro, and Touch Plus profiles are enabled. Symmetric projection is off. System keyboard manifest entries are off. Latency optimization is Prioritize Input Polling.");
+            Debug.Log("[FloppyFlight] OpenXR Android loader enabled. Meta Quest Support and the Meta XR feature group are on. Meta's build step keeps OVRPlugin's libopenxr_loader.so and drops Unity's openxr_loader.aar. com.oculus.supportedDevices is quest2|questpro|quest3|quest3s. Quest 1 and VR Glasses (stanley) are not targeted. Stereo mode is Single Pass Instanced (Vulkan multiview). Oculus Touch, Touch Pro, and Touch Plus profiles are enabled. Symmetric projection is off. System keyboard manifest entries are off. Latency optimization is Prioritize Input Polling.");
         }
 
         static void EnableMetaXrFeatureGroup(BuildTargetGroup group)
@@ -356,6 +360,55 @@ namespace FloppyFlight.Editor
             configType.GetMethod("CommitProjectConfig", BindingFlags.Public | BindingFlags.Static)
                 ?.Invoke(null, new[] { cached });
             Debug.Log("[FloppyFlight] Turned off OVRProjectConfig.requiresSystemKeyboard so it does not duplicate the Meta Quest Support keyboard manifest entry.");
+        }
+
+        static readonly string[] OvrTargetDeviceNames = { "Quest2", "QuestPro", "Quest3", "Quest3S" };
+
+        static void ApplyOvrTargetDevices()
+        {
+            var configType = FindTypeByName("OVRProjectConfig");
+            if (configType == null)
+            {
+                Debug.LogWarning("[FloppyFlight] OVRProjectConfig was not found. The generated manifest will still force com.oculus.supportedDevices.");
+                return;
+            }
+
+            var cached = configType.GetProperty("CachedProjectConfig", BindingFlags.Public | BindingFlags.Static)
+                ?.GetValue(null);
+            var field = configType.GetField("targetDeviceTypes", BindingFlags.Instance | BindingFlags.Public);
+            var deviceType = configType.GetNestedType("DeviceType", BindingFlags.Public);
+            if (cached == null || field == null || deviceType == null || !deviceType.IsEnum)
+            {
+                Debug.LogWarning("[FloppyFlight] OVRProjectConfig.targetDeviceTypes was not found. The generated manifest will still force com.oculus.supportedDevices.");
+                return;
+            }
+
+            var next = Activator.CreateInstance(typeof(List<>).MakeGenericType(deviceType)) as System.Collections.IList;
+            if (next == null)
+            {
+                Debug.LogWarning("[FloppyFlight] Could not create OVRProjectConfig.targetDeviceTypes. The generated manifest will still force com.oculus.supportedDevices.");
+                return;
+            }
+
+            foreach (var name in OvrTargetDeviceNames)
+            {
+                try
+                {
+                    next.Add(Enum.Parse(deviceType, name));
+                }
+                catch (ArgumentException)
+                {
+                    Debug.LogWarning("[FloppyFlight] OVRProjectConfig.DeviceType has no " + name + ". Left targetDeviceTypes unchanged. The generated manifest will still force com.oculus.supportedDevices.");
+                    return;
+                }
+            }
+
+            field.SetValue(cached, next);
+            configType.GetMethod("CommitProjectConfig", BindingFlags.Public | BindingFlags.Static)
+                ?.Invoke(null, new[] { cached });
+            if (cached is UnityEngine.Object asset)
+                EditorUtility.SetDirty(asset);
+            Debug.Log("[FloppyFlight] OVRProjectConfig.targetDeviceTypes is Quest 2, Quest Pro, Quest 3, and Quest 3S. Quest 1 and VR Glasses are omitted so the manifest does not contain quest or stanley.");
         }
 
         static readonly string[] InteractionProfileIds =
@@ -640,25 +693,45 @@ namespace FloppyFlight.Editor
     /// runs after that and still drops any leftover copy from openxr_loader.aar, then
     /// tells the launcher module to pick a single match so mergeReleaseNativeLibs cannot
     /// fail if another package adds the same path.
+    /// It also rewrites com.oculus.supportedDevices after Meta's manifest preprocessor
+    /// (callback order 99999) and drops non-arm64 .so files that AARs keep under assets/.
     /// </summary>
     class OpenXrLoaderGradleDedupe : IPostGenerateGradleAndroidProject
     {
         const string PickFirstMarker = "FloppyFlightOpenXrLoaderPickFirst";
         const string LoaderSo = "libopenxr_loader.so";
+        const string SupportedDevicesName = "com.oculus.supportedDevices";
+        const string SupportedDevicesValue = "quest2|questpro|quest3|quest3s";
+        const string AndroidNs = "http://schemas.android.com/apk/res/android";
+        const string ToolsNs = "http://schemas.android.com/tools";
+
+        static readonly string[] NonArm64AbiSegments =
+        {
+            "armeabi-v7a",
+            "armeabi",
+            "x86_64",
+            "x86",
+            "mips64",
+            "mips"
+        };
 
         public int callbackOrder => 100000;
 
         public void OnPostGenerateGradleAndroidProject(string path)
         {
             var unityLibrary = ResolveUnityLibrary(path);
+            var gradleRoot = ResolveGradleRoot(path, unityLibrary);
             var removed = StripUnityLoaderBesideOvrPlugin(unityLibrary);
             var launcherGradle = ResolveLauncherGradle(path, unityLibrary);
             var patched = PatchLauncherPickFirst(launcherGradle);
+            var strippedLibs = StripNonArm64NativeLibraries(gradleRoot ?? unityLibrary);
+            RewriteSupportedDevices(unityLibrary, gradleRoot);
             Debug.Log(
                 "[FloppyFlight] OpenXR loader packaging: removed " + removed
                 + " libopenxr_loader.so entries from Unity's openxr_loader.aar"
                 + (patched ? " and added launcher jniLibs.pickFirsts." : ". Launcher pickFirst was already present.")
-                + " OVRPlugin keeps the loader Quest runs.");
+                + " OVRPlugin keeps the loader Quest runs. Removed " + strippedLibs
+                + " non-arm64 native libraries. com.oculus.supportedDevices is " + SupportedDevicesValue + ".");
         }
 
         static int StripUnityLoaderBesideOvrPlugin(string unityLibrary)
@@ -702,47 +775,50 @@ namespace FloppyFlight.Editor
             var removed = 0;
             using (var inputStream = File.OpenRead(aarPath))
             using (var input = new ZipArchive(inputStream, ZipArchiveMode.Read))
-            using (var outputStream = File.Create(temp))
-            using (var output = new ZipArchive(outputStream, ZipArchiveMode.Create))
             {
+                var dropLoader = false;
                 foreach (var entry in input.Entries)
                 {
-                    var name = entry.FullName.Replace('\\', '/');
-                    if (name.EndsWith("/" + LoaderSo, StringComparison.Ordinal)
-                        || string.Equals(entry.Name, LoaderSo, StringComparison.Ordinal))
+                    if (IsOpenXrLoaderEntry(NormalizeZipName(entry.FullName)))
                     {
-                        removed++;
-                        continue;
+                        dropLoader = true;
+                        break;
                     }
+                }
 
-                    if (string.IsNullOrEmpty(entry.Name))
+                if (!dropLoader)
+                    return 0;
+
+                using (var outputStream = File.Create(temp))
+                using (var output = new ZipArchive(outputStream, ZipArchiveMode.Create))
+                {
+                    foreach (var entry in input.Entries)
                     {
-                        output.CreateEntry(entry.FullName);
-                        continue;
-                    }
+                        if (IsOpenXrLoaderEntry(NormalizeZipName(entry.FullName)))
+                        {
+                            removed++;
+                            continue;
+                        }
 
-                    var stored = entry.Length == entry.CompressedLength;
-                    var created = output.CreateEntry(
-                        entry.FullName,
-                        stored ? System.IO.Compression.CompressionLevel.NoCompression : System.IO.Compression.CompressionLevel.Optimal);
-                    using (var source = entry.Open())
-                    using (var destination = created.Open())
-                        source.CopyTo(destination);
+                        if (string.IsNullOrEmpty(entry.Name))
+                        {
+                            output.CreateEntry(entry.FullName);
+                            continue;
+                        }
+
+                        CopyZipEntry(output, entry);
+                    }
                 }
             }
 
-            if (removed == 0)
-            {
-                File.Delete(temp);
-                return 0;
-            }
-
-            var attributes = File.GetAttributes(aarPath);
-            if ((attributes & FileAttributes.ReadOnly) != 0)
-                File.SetAttributes(aarPath, attributes & ~FileAttributes.ReadOnly);
-            File.Copy(temp, aarPath, true);
-            File.Delete(temp);
+            ReplaceGeneratedFile(aarPath, temp);
             return removed;
+        }
+
+        static bool IsOpenXrLoaderEntry(string name)
+        {
+            return name.EndsWith("/" + LoaderSo, StringComparison.Ordinal)
+                || string.Equals(Path.GetFileName(name.TrimEnd('/')), LoaderSo, StringComparison.Ordinal);
         }
 
         static bool PatchLauncherPickFirst(string launcherGradle)
@@ -810,6 +886,506 @@ namespace FloppyFlight.Editor
                     return candidate;
             }
             return candidates.Count > 0 ? candidates[candidates.Count - 1] : null;
+        }
+
+        static string ResolveGradleRoot(string path, string unityLibrary)
+        {
+            var candidates = new List<string>();
+            if (!string.IsNullOrEmpty(unityLibrary))
+            {
+                var parent = Directory.GetParent(unityLibrary);
+                if (parent != null)
+                    candidates.Add(parent.FullName);
+            }
+            if (!string.IsNullOrEmpty(path))
+            {
+                candidates.Add(path);
+                var parent = Directory.GetParent(path);
+                if (parent != null)
+                    candidates.Add(parent.FullName);
+            }
+
+            foreach (var candidate in candidates)
+            {
+                if (Directory.Exists(Path.Combine(candidate, "launcher"))
+                    && Directory.Exists(Path.Combine(candidate, "unityLibrary")))
+                    return candidate;
+            }
+
+            if (!string.IsNullOrEmpty(unityLibrary))
+                return unityLibrary;
+            return path;
+        }
+
+        static void RewriteSupportedDevices(string unityLibrary, string gradleRoot)
+        {
+            if (string.IsNullOrEmpty(unityLibrary))
+            {
+                throw new InvalidOperationException(
+                    "The generated Unity Android library was not found. Cannot set com.oculus.supportedDevices.");
+            }
+
+            var main = Path.Combine(unityLibrary, "src", "main", "AndroidManifest.xml");
+            if (!File.Exists(main))
+            {
+                throw new InvalidOperationException(
+                    "Generated AndroidManifest.xml was not found at " + main + ". Cannot set com.oculus.supportedDevices.");
+            }
+
+            var searchRoot = !string.IsNullOrEmpty(gradleRoot) && Directory.Exists(gradleRoot) ? gradleRoot : unityLibrary;
+            var mainFull = Path.GetFullPath(main);
+            var removedElsewhere = 0;
+            foreach (var file in Directory.GetFiles(searchRoot, "AndroidManifest.xml", SearchOption.AllDirectories))
+            {
+                if (string.Equals(Path.GetFullPath(file), mainFull, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (RemoveSupportedDevicesFile(file))
+                    removedElsewhere++;
+            }
+
+            EnsureMainSupportedDevices(main);
+            VerifySupportedDevices(searchRoot, mainFull);
+            Debug.Log(
+                "[FloppyFlight] com.oculus.supportedDevices is exactly " + SupportedDevicesValue
+                + ". Removed that meta-data from " + removedElsewhere
+                + " other manifests so the merged manifest declares it once, with tools:replace=\"android:value\".");
+        }
+
+        static void EnsureMainSupportedDevices(string path)
+        {
+            var doc = LoadManifest(path);
+            var manifest = doc.DocumentElement;
+            if (manifest == null || !string.Equals(manifest.LocalName, "manifest", StringComparison.Ordinal))
+                throw new InvalidOperationException(path + " has no manifest root.");
+
+            if (string.IsNullOrEmpty(manifest.GetAttribute("xmlns:tools")))
+                manifest.SetAttribute("xmlns:tools", ToolsNs);
+
+            var application = FindChildElement(manifest, "application");
+            if (application == null)
+                throw new InvalidOperationException(path + " has no application element.");
+
+            XmlElement kept = null;
+            var existing = FindSupportedDevices(doc);
+            for (var i = 0; i < existing.Count; i++)
+            {
+                var element = existing[i];
+                if (kept == null && element.ParentNode == application)
+                {
+                    kept = element;
+                    continue;
+                }
+                if (element.ParentNode != null)
+                    element.ParentNode.RemoveChild(element);
+            }
+
+            if (kept == null)
+            {
+                kept = doc.CreateElement("meta-data");
+                application.AppendChild(kept);
+            }
+
+            kept.SetAttribute("name", AndroidNs, SupportedDevicesName);
+            kept.SetAttribute("value", AndroidNs, SupportedDevicesValue);
+            kept.SetAttribute("replace", ToolsNs, "android:value");
+            SaveManifest(doc, path);
+        }
+
+        static bool RemoveSupportedDevicesFile(string path)
+        {
+            var doc = LoadManifest(path);
+            var existing = FindSupportedDevices(doc);
+            if (existing.Count == 0)
+                return false;
+
+            for (var i = 0; i < existing.Count; i++)
+            {
+                if (existing[i].ParentNode != null)
+                    existing[i].ParentNode.RemoveChild(existing[i]);
+            }
+
+            SaveManifest(doc, path);
+            return true;
+        }
+
+        static void VerifySupportedDevices(string root, string mainFull)
+        {
+            var declarations = 0;
+            foreach (var file in Directory.GetFiles(root, "AndroidManifest.xml", SearchOption.AllDirectories))
+            {
+                var nodes = FindSupportedDevices(LoadManifest(file));
+                if (string.Equals(Path.GetFullPath(file), mainFull, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (nodes.Count != 1)
+                    {
+                        throw new InvalidOperationException(
+                            file + " declares com.oculus.supportedDevices " + nodes.Count + " times. Expected one.");
+                    }
+
+                    var value = AndroidAttribute(nodes[0], "value");
+                    if (!string.Equals(value, SupportedDevicesValue, StringComparison.Ordinal))
+                    {
+                        throw new InvalidOperationException(
+                            file + " com.oculus.supportedDevices is '" + value + "'. Expected " + SupportedDevicesValue + ".");
+                    }
+
+                    if (!AllowedDeviceList(value))
+                    {
+                        throw new InvalidOperationException(
+                            file + " includes a device other than quest2, questpro, quest3, and quest3s.");
+                    }
+
+                    var replace = ToolsAttribute(nodes[0], "replace");
+                    if (string.IsNullOrEmpty(replace) || replace.IndexOf("android:value", StringComparison.Ordinal) < 0)
+                    {
+                        throw new InvalidOperationException(
+                            file + " is missing tools:replace=\"android:value\" on com.oculus.supportedDevices.");
+                    }
+
+                    declarations++;
+                }
+                else if (nodes.Count != 0)
+                {
+                    throw new InvalidOperationException(file + " still declares com.oculus.supportedDevices.");
+                }
+            }
+
+            foreach (var archive in FindArchives(root))
+            {
+                if (ArchiveDeclaresSupportedDevices(archive))
+                    throw new InvalidOperationException(archive + " still declares com.oculus.supportedDevices.");
+            }
+
+            if (declarations != 1)
+            {
+                throw new InvalidOperationException(
+                    "com.oculus.supportedDevices must be declared once in the Gradle project. Found " + declarations + ".");
+            }
+        }
+
+        static bool AllowedDeviceList(string value)
+        {
+            if (!string.Equals(value, SupportedDevicesValue, StringComparison.Ordinal))
+                return false;
+            var tokens = value.Split('|');
+            if (tokens.Length != 4)
+                return false;
+            for (var i = 0; i < tokens.Length; i++)
+            {
+                if (tokens[i] == "quest" || tokens[i] == "stanley" || tokens[i] == "vrglasses"
+                    || tokens[i] == "cambria" || tokens[i] == "eureka")
+                    return false;
+            }
+            return true;
+        }
+
+        static int StripNonArm64NativeLibraries(string root)
+        {
+            if (string.IsNullOrEmpty(root) || !Directory.Exists(root))
+                return 0;
+
+            var removed = 0;
+            foreach (var so in Directory.GetFiles(root, "*.so", SearchOption.AllDirectories))
+            {
+                if (!IsNonArm64NativeLibrary(so))
+                    continue;
+                ClearReadOnly(so);
+                File.Delete(so);
+                removed++;
+                Debug.Log("[FloppyFlight] Removed non-arm64 native library " + so);
+            }
+
+            foreach (var archive in FindArchives(root))
+                removed += SanitizeNativeArchive(archive);
+
+            if (removed == 0)
+                Debug.Log("[FloppyFlight] No armeabi-v7a, x86, or other non-arm64 .so files were in the generated Gradle project.");
+            return removed;
+        }
+
+        static int SanitizeNativeArchive(string archivePath)
+        {
+            var manifestBytes = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+            var manifestChanged = false;
+            var hasNonArm64 = false;
+            var temp = archivePath + ".floppyflight-tmp";
+            var removed = 0;
+
+            using (var inputStream = File.OpenRead(archivePath))
+            using (var input = new ZipArchive(inputStream, ZipArchiveMode.Read))
+            {
+                foreach (var entry in input.Entries)
+                {
+                    var name = NormalizeZipName(entry.FullName);
+                    if (IsNonArm64NativeLibrary(name))
+                        hasNonArm64 = true;
+                    if (string.IsNullOrEmpty(entry.Name) || !IsAndroidManifestEntry(name) || manifestBytes.ContainsKey(name))
+                        continue;
+
+                    var updated = RemoveSupportedDevicesBytes(ReadEntryBytes(entry), out var changed);
+                    manifestBytes[name] = updated;
+                    if (changed)
+                        manifestChanged = true;
+                }
+
+                if (!hasNonArm64 && !manifestChanged)
+                    return 0;
+
+                try
+                {
+                    using (var outputStream = File.Create(temp))
+                    using (var output = new ZipArchive(outputStream, ZipArchiveMode.Create))
+                    {
+                        foreach (var entry in input.Entries)
+                        {
+                            var name = NormalizeZipName(entry.FullName);
+                            if (IsNonArm64NativeLibrary(name))
+                            {
+                                removed++;
+                                Debug.Log("[FloppyFlight] Removed non-arm64 native library " + name + " from " + Path.GetFileName(archivePath));
+                                continue;
+                            }
+
+                            if (manifestBytes.TryGetValue(name, out var replacement))
+                            {
+                                WriteBytesEntry(output, entry, replacement);
+                                continue;
+                            }
+
+                            if (string.IsNullOrEmpty(entry.Name))
+                            {
+                                output.CreateEntry(entry.FullName);
+                                continue;
+                            }
+
+                            CopyZipEntry(output, entry);
+                        }
+                    }
+                }
+                catch
+                {
+                    if (File.Exists(temp))
+                        File.Delete(temp);
+                    throw;
+                }
+            }
+
+            ReplaceGeneratedFile(archivePath, temp);
+            return removed;
+        }
+
+        static bool ArchiveDeclaresSupportedDevices(string archivePath)
+        {
+            using (var inputStream = File.OpenRead(archivePath))
+            using (var input = new ZipArchive(inputStream, ZipArchiveMode.Read))
+            {
+                foreach (var entry in input.Entries)
+                {
+                    var name = NormalizeZipName(entry.FullName);
+                    if (string.IsNullOrEmpty(entry.Name) || !IsAndroidManifestEntry(name))
+                        continue;
+                    var doc = new XmlDocument();
+                    using (var stream = entry.Open())
+                        doc.Load(stream);
+                    if (FindSupportedDevices(doc).Count > 0)
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        static byte[] RemoveSupportedDevicesBytes(byte[] xml, out bool changed)
+        {
+            var doc = new XmlDocument();
+            using (var stream = new MemoryStream(xml, false))
+                doc.Load(stream);
+            var existing = FindSupportedDevices(doc);
+            changed = existing.Count > 0;
+            if (!changed)
+                return xml;
+
+            for (var i = 0; i < existing.Count; i++)
+            {
+                if (existing[i].ParentNode != null)
+                    existing[i].ParentNode.RemoveChild(existing[i]);
+            }
+
+            using (var memory = new MemoryStream())
+            {
+                var settings = ManifestWriterSettings();
+                settings.CloseOutput = false;
+                using (var writer = XmlWriter.Create(memory, settings))
+                    doc.Save(writer);
+                return memory.ToArray();
+            }
+        }
+
+        static List<XmlElement> FindSupportedDevices(XmlDocument doc)
+        {
+            var found = new List<XmlElement>();
+            var nodes = doc.GetElementsByTagName("meta-data");
+            foreach (XmlNode node in nodes)
+            {
+                var element = node as XmlElement;
+                if (element == null)
+                    continue;
+                if (string.Equals(AndroidAttribute(element, "name"), SupportedDevicesName, StringComparison.Ordinal))
+                    found.Add(element);
+            }
+            return found;
+        }
+
+        static string AndroidAttribute(XmlElement element, string localName)
+        {
+            var value = element.GetAttribute(localName, AndroidNs);
+            if (!string.IsNullOrEmpty(value))
+                return value;
+            value = element.GetAttribute("android:" + localName);
+            return string.IsNullOrEmpty(value) ? null : value;
+        }
+
+        static string ToolsAttribute(XmlElement element, string localName)
+        {
+            var value = element.GetAttribute(localName, ToolsNs);
+            if (!string.IsNullOrEmpty(value))
+                return value;
+            value = element.GetAttribute("tools:" + localName);
+            return string.IsNullOrEmpty(value) ? null : value;
+        }
+
+        static XmlElement FindChildElement(XmlElement parent, string localName)
+        {
+            foreach (XmlNode child in parent.ChildNodes)
+            {
+                var element = child as XmlElement;
+                if (element != null && string.Equals(element.LocalName, localName, StringComparison.Ordinal))
+                    return element;
+            }
+            return null;
+        }
+
+        static bool IsAndroidManifestEntry(string name)
+        {
+            return string.Equals(name, "AndroidManifest.xml", StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith("/AndroidManifest.xml", StringComparison.OrdinalIgnoreCase);
+        }
+
+        static bool IsNonArm64NativeLibrary(string path)
+        {
+            var name = NormalizeZipName(path);
+            if (!name.EndsWith(".so", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            var segments = name.Split('/');
+            for (var i = 0; i < segments.Length; i++)
+            {
+                var segment = segments[i];
+                if (segment.StartsWith("android.", StringComparison.OrdinalIgnoreCase))
+                    segment = segment.Substring("android.".Length);
+                for (var j = 0; j < NonArm64AbiSegments.Length; j++)
+                {
+                    if (string.Equals(segment, NonArm64AbiSegments[j], StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        static string NormalizeZipName(string name)
+        {
+            return (name ?? string.Empty).Replace('\\', '/');
+        }
+
+        static IEnumerable<string> FindArchives(string root)
+        {
+            if (string.IsNullOrEmpty(root) || !Directory.Exists(root))
+                yield break;
+            foreach (var archive in Directory.GetFiles(root, "*.aar", SearchOption.AllDirectories))
+                yield return archive;
+            foreach (var archive in Directory.GetFiles(root, "*.jar", SearchOption.AllDirectories))
+                yield return archive;
+        }
+
+        static XmlDocument LoadManifest(string path)
+        {
+            var doc = new XmlDocument();
+            doc.Load(path);
+            return doc;
+        }
+
+        static void SaveManifest(XmlDocument doc, string path)
+        {
+            var temp = path + ".floppyflight-tmp";
+            var settings = ManifestWriterSettings();
+            using (var writer = XmlWriter.Create(temp, settings))
+                doc.Save(writer);
+            ReplaceGeneratedFile(path, temp);
+        }
+
+        static XmlWriterSettings ManifestWriterSettings()
+        {
+            return new XmlWriterSettings
+            {
+                Encoding = new UTF8Encoding(false),
+                Indent = true,
+                OmitXmlDeclaration = false
+            };
+        }
+
+        static void CopyZipEntry(ZipArchive output, ZipArchiveEntry entry)
+        {
+            var stored = entry.Length == entry.CompressedLength;
+            var created = output.CreateEntry(
+                entry.FullName,
+                stored ? System.IO.Compression.CompressionLevel.NoCompression : System.IO.Compression.CompressionLevel.Optimal);
+            using (var source = entry.Open())
+            using (var destination = created.Open())
+                source.CopyTo(destination);
+        }
+
+        static void WriteBytesEntry(ZipArchive output, ZipArchiveEntry entry, byte[] bytes)
+        {
+            var stored = entry.Length == entry.CompressedLength;
+            var created = output.CreateEntry(
+                entry.FullName,
+                stored ? System.IO.Compression.CompressionLevel.NoCompression : System.IO.Compression.CompressionLevel.Optimal);
+            using (var destination = created.Open())
+                destination.Write(bytes, 0, bytes.Length);
+        }
+
+        static byte[] ReadEntryBytes(ZipArchiveEntry entry)
+        {
+            using (var source = entry.Open())
+            using (var memory = new MemoryStream())
+            {
+                source.CopyTo(memory);
+                return memory.ToArray();
+            }
+        }
+
+        static void ReplaceGeneratedFile(string destination, string temp)
+        {
+            try
+            {
+                ClearReadOnly(destination);
+                File.Copy(temp, destination, true);
+                File.Delete(temp);
+            }
+            catch
+            {
+                if (File.Exists(temp))
+                    File.Delete(temp);
+                throw;
+            }
+        }
+
+        static void ClearReadOnly(string path)
+        {
+            if (!File.Exists(path))
+                return;
+            var attributes = File.GetAttributes(path);
+            if ((attributes & FileAttributes.ReadOnly) != 0)
+                File.SetAttributes(path, attributes & ~FileAttributes.ReadOnly);
         }
     }
 }
