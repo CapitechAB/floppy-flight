@@ -70,14 +70,26 @@ namespace FloppyFlight.Editor
             Debug.Log("[FloppyFlight] Quest player settings and OpenXR loader are configured.");
         }
 
+        [MenuItem("Floppy Flight/Build Signed Release APK")]
+        public static void BuildAndroidApk()
+        {
+            RunBuild(false);
+        }
+
         [MenuItem("Floppy Flight/Build Signed Release AAB")]
         public static void BuildAndroidAab()
         {
+            RunBuild(true);
+        }
+
+        static void RunBuild(bool appBundle)
+        {
             var batch = Application.isBatchMode;
+            var label = appBundle ? "AAB" : "APK";
             try
             {
-                var output = BuildRelease();
-                Debug.Log("[FloppyFlight] Signed release AAB: " + output);
+                var output = BuildRelease(appBundle);
+                Debug.Log("[FloppyFlight] Signed release " + label + ": " + output);
                 if (batch) EditorApplication.Exit(0);
             }
             catch (Exception ex)
@@ -90,7 +102,7 @@ namespace FloppyFlight.Editor
             }
         }
 
-        static string BuildRelease()
+        static string BuildRelease(bool appBundle)
         {
             var args = ParseArgs();
             var version = GetOpt(args, "buildVersion", "APP_VERSION") ?? DefaultVersion;
@@ -109,7 +121,7 @@ namespace FloppyFlight.Editor
             var alias = RequireSecret(args, "androidKeyaliasName", "ANDROID_KEYALIAS_NAME", "key alias");
             var aliasPass = RequireSecret(args, "androidKeyaliasPass", "ANDROID_KEYALIAS_PASS", "key alias password");
 
-            var output = ResolveOutput(GetOpt(args, "customBuildPath", "AAB_OUTPUT"));
+            var output = ResolveOutput(GetOpt(args, "customBuildPath", appBundle ? "AAB_OUTPUT" : "APK_OUTPUT"), appBundle);
             Directory.CreateDirectory(Path.GetDirectoryName(output) ?? ".");
 
             try
@@ -120,12 +132,14 @@ namespace FloppyFlight.Editor
                 PlayerSettings.Android.keyaliasName = alias;
                 PlayerSettings.Android.keyaliasPass = aliasPass;
 
-                EditorUserBuildSettings.buildAppBundle = true;
+                EditorUserBuildSettings.buildAppBundle = appBundle;
                 EditorUserBuildSettings.exportAsGoogleAndroidProject = false;
                 EditorUserBuildSettings.androidBuildSystem = AndroidBuildSystem.Gradle;
                 EditorUserBuildSettings.development = false;
                 EditorUserBuildSettings.connectProfiler = false;
                 EditorUserBuildSettings.allowDebugging = false;
+                // Unity 6000.0 / AGP 9 sign a release package with APK Signature Scheme v2.
+                // Do not set v2SigningEnabled false in a Gradle template or post-process.
 
                 var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
                 {
@@ -143,7 +157,10 @@ namespace FloppyFlight.Editor
                 }
 
                 if (!File.Exists(output))
-                    throw new FileNotFoundException("Build reported success but the .aab is missing.", output);
+                {
+                    throw new FileNotFoundException(
+                        "Build reported success but the " + (appBundle ? ".aab" : ".apk") + " is missing.", output);
+                }
 
                 return Path.GetFullPath(output);
             }
@@ -166,6 +183,7 @@ namespace FloppyFlight.Editor
             PlayerSettings.bundleVersion = version;
             PlayerSettings.SetApplicationIdentifier(android, PackageName);
             PlayerSettings.Android.bundleVersionCode = Math.Max(1, versionCode);
+            Debug.Log("[FloppyFlight] Android versionName " + version + ", versionCode " + PlayerSettings.Android.bundleVersionCode + ".");
             PlayerSettings.colorSpace = ColorSpace.Linear;
             PlayerSettings.MTRendering = true;
             PlayerSettings.stripEngineCode = false;
@@ -183,7 +201,9 @@ namespace FloppyFlight.Editor
 
             PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel32;
             PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevel34;
+            // One arm64 APK. No per-ABI splits and no OBB expansion file.
             PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
+            PlayerSettings.Android.splitApplicationBinary = false;
             PlayerSettings.Android.preferredInstallLocation = AndroidPreferredInstallLocation.Auto;
             PlayerSettings.Android.forceInternetPermission = true;
             PlayerSettings.Android.forceSDCardPermission = false;
@@ -470,20 +490,25 @@ namespace FloppyFlight.Editor
             return null;
         }
 
-        static string ResolveOutput(string custom)
+        static string ResolveOutput(string custom, bool appBundle)
         {
+            var extension = appBundle ? ".aab" : ".apk";
             if (string.IsNullOrWhiteSpace(custom))
-                custom = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Builds", "FloppyFlight.aab"));
-
-            if (!Path.IsPathRooted(custom))
+            {
+                // unity/Assets -> repository root, matching game-ci buildsPath "build".
+                custom = Path.GetFullPath(Path.Combine(
+                    Application.dataPath, "..", "..", "build", "Android", "FloppyFlight" + extension));
+            }
+            else if (!Path.IsPathRooted(custom))
+            {
                 custom = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), custom));
+            }
 
-            if (custom.EndsWith(".apk", StringComparison.OrdinalIgnoreCase))
-                custom = Path.ChangeExtension(custom, ".aab");
-            else if (!custom.EndsWith(".aab", StringComparison.OrdinalIgnoreCase))
-                custom += ".aab";
+            if (custom.EndsWith(".apk", StringComparison.OrdinalIgnoreCase)
+                || custom.EndsWith(".aab", StringComparison.OrdinalIgnoreCase))
+                return Path.ChangeExtension(custom, extension);
 
-            return custom;
+            return custom + extension;
         }
 
         static int DefaultVersionCode(Dictionary<string, string> args)

@@ -1,7 +1,15 @@
-name: Quest release AAB
+name: Quest release APK
 
 on:
   workflow_dispatch:
+    inputs:
+      package:
+        description: Release package. The Horizon dashboard accepts a signed APK.
+        type: choice
+        default: apk
+        options:
+          - apk
+          - aab
   push:
     branches: [main]
     paths:
@@ -12,8 +20,8 @@ permissions:
   contents: read
 
 jobs:
-  build-aab:
-    name: Signed Android App Bundle
+  build:
+    name: Signed Quest release
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -28,7 +36,7 @@ jobs:
           restore-keys: |
             Library-quest-android-
 
-      - name: Build signed release AAB
+      - name: Build signed release
         uses: game-ci/unity-builder@v4
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
@@ -40,8 +48,8 @@ jobs:
           targetPlatform: Android
           buildName: FloppyFlight
           buildsPath: build
-          buildMethod: FloppyFlight.Editor.BuildScript.BuildAndroidAab
-          androidExportType: androidAppBundle
+          buildMethod: ${{ github.event.inputs.package == 'aab' && 'FloppyFlight.Editor.BuildScript.BuildAndroidAab' || 'FloppyFlight.Editor.BuildScript.BuildAndroidApk' }}
+          androidExportType: ${{ github.event.inputs.package == 'aab' && 'androidAppBundle' || 'androidPackage' }}
           androidVersionCode: ${{ github.run_number }}
           versioning: None
           androidKeystoreName: floppy-flight-release.keystore
@@ -51,12 +59,20 @@ jobs:
           androidKeyaliasPass: ${{ secrets.ANDROID_KEYALIAS_PASS }}
           customParameters: -metaAppId ${{ secrets.META_APP_ID }}
 
-      - name: Upload AAB artifact
+      - name: Upload APK artifact
+        if: github.event.inputs.package != 'aab'
         uses: actions/upload-artifact@v4
         with:
-          name: FloppyFlight-Quest-release
-          path: |
-            build/**/*.aab
-            unity/Builds/**/*.aab
+          name: FloppyFlight-Quest-release-apk
+          path: build/**/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload AAB artifact
+        if: github.event.inputs.package == 'aab'
+        uses: actions/upload-artifact@v4
+        with:
+          name: FloppyFlight-Quest-release-aab
+          path: build/**/*.aab
           if-no-files-found: error
           retention-days: 14
