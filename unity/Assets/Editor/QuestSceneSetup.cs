@@ -224,6 +224,7 @@ namespace FloppyFlight.Editor
                 if (shader != null && existing.shader != shader)
                 {
                     existing.shader = shader;
+                    existing.color = Color.white;
                     EditorUtility.SetDirty(existing);
                 }
                 return existing;
