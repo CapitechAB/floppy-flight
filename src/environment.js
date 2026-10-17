@@ -21,6 +21,8 @@ export class Environment {
     this.leafParticles = null;
     this.sparkleParticles = null;
     this.sunRays = null;
+    this.sunLight = null;
+    this.sunTarget = null;
     this.runwayTexture = null;
     this.meadowTexture = null;
 
@@ -75,19 +77,29 @@ export class Environment {
     const hemiLight = new THREE.HemisphereLight(0xfffae6, 0x4cd137, 0.95);
     this.scene.add(hemiLight);
 
-    // Golden Sunlight
-    const sunLight = new THREE.DirectionalLight(0xfff1c5, 1.4);
-    sunLight.position.set(10, 28, -40);
+    // Golden Sunlight with dynamic shadow tracking
+    const sunLight = new THREE.DirectionalLight(0xfff1c5, 1.45);
+    sunLight.position.set(12, 36, -75);
     sunLight.castShadow = true;
-    sunLight.shadow.mapSize.width = 1024;
-    sunLight.shadow.mapSize.height = 1024;
-    sunLight.shadow.camera.near = 0.5;
-    sunLight.shadow.camera.far = 120;
-    sunLight.shadow.camera.left = -30;
-    sunLight.shadow.camera.right = 30;
-    sunLight.shadow.camera.top = 30;
-    sunLight.shadow.camera.bottom = -30;
+    sunLight.shadow.mapSize.width = 2048;
+    sunLight.shadow.mapSize.height = 2048;
+    sunLight.shadow.camera.near = 1.0;
+    sunLight.shadow.camera.far = 145;
+    sunLight.shadow.camera.left = -35;
+    sunLight.shadow.camera.right = 35;
+    sunLight.shadow.camera.top = 48;
+    sunLight.shadow.camera.bottom = -48;
+    sunLight.shadow.bias = -0.0003;
+    sunLight.shadow.normalBias = 0.035;
+
+    const sunTarget = new THREE.Object3D();
+    sunTarget.position.set(0, 4.0, -25);
+    this.scene.add(sunTarget);
+    sunLight.target = sunTarget;
+
     this.scene.add(sunLight);
+    this.sunLight = sunLight;
+    this.sunTarget = sunTarget;
 
     // Radiant Sun Glow Mesh on horizon
     const sunGlowGeom = new THREE.CircleGeometry(16, 32);
@@ -1093,6 +1105,16 @@ export class Environment {
       this.sunRays.rotation.z += delta * 0.08;
       this.sunRays.position.z = playerZ - 170;
       if (this.sunMesh) this.sunMesh.position.z = playerZ - 172;
+    }
+
+    // Dynamic directional sunlight and shadow tracking
+    // Frustum travels forward in lockstep with playerZ, ensuring all upcoming pipes,
+    // trees, avatar, and obstacles cast crisp, complete shadows forever into the run.
+    if (this.sunLight && this.sunTarget) {
+      const targetZ = playerZ - 25;
+      this.sunTarget.position.set(0, 4.0, targetZ);
+      this.sunLight.position.set(12, 36, targetZ - 50);
+      this.sunTarget.updateMatrixWorld();
     }
 
     // Smooth continuous ground scrolling (zero snapping, zero popping)
