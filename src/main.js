@@ -9,12 +9,15 @@ import { UIManager } from './ui.js';
 
 class FloppyFlightGame {
   constructor() {
-    this.state = 'READY'; // 'READY', 'PLAYING', 'LEVEL_CLEARED', 'GAMEOVER'
+    this.state = 'READY'; // 'READY', 'PLAYING', 'LEVEL_CLEARED', 'PAUSED', 'GAMEOVER'
+    this.previousState = null;
     this.score = 0;
     this.currentLevel = 1;
     this.levelPipesCleared = 0;
     this.pipesPerLevel = 10;
     this.levelClearedSavedY = 5.0;
+    this.pauseSavedY = 5.0;
+    this.menuButtonPrevPressed = false;
 
     // Raycasters for mouse & VR interaction with UI
     this.raycaster = new THREE.Raycaster();
@@ -96,6 +99,16 @@ class FloppyFlightGame {
     // Trigger/Grip events for accessibility
     const onSelect = (e) => {
       sound.init();
+      if (this.state === 'PAUSED') {
+        const action = this.checkPauseControllerHit(e.target);
+        if (action === 'quit') {
+          this.quitGame();
+        } else {
+          // Pointing at Continue or pulling trigger safely continues
+          this.continueGame();
+        }
+        return;
+      }
       if (this.state === 'LEVEL_CLEARED') {
         const action = this.checkControllerHit(e.target);
         if (action === 'quit') {
@@ -127,17 +140,29 @@ class FloppyFlightGame {
   setupInputs() {
     // Desktop keyboard
     window.addEventListener('keydown', (e) => {
+      // Escape toggles pause menu
+      if (e.code === 'Escape') {
+        e.preventDefault();
+        this.togglePause();
+        return;
+      }
+
+      if (this.state === 'PAUSED') {
+        if (e.code === 'Space' || e.code === 'Enter') {
+          e.preventDefault();
+          this.continueGame();
+          return;
+        }
+        return;
+      }
+
       if (this.state === 'LEVEL_CLEARED') {
         if (e.code === 'Space' || e.code === 'Enter') {
           e.preventDefault();
           this.nextLevel();
           return;
         }
-        if (e.code === 'KeyQ' || e.code === 'Escape') {
-          e.preventDefault();
-          this.quitGame();
-          return;
-        }
+        return;
       }
 
       if (e.code === 'Space' || e.code === 'KeyW' || e.code === 'ArrowUp') {
@@ -152,6 +177,18 @@ class FloppyFlightGame {
       sound.init();
       // Don't trigger if clicking VR button
       if (e.target && e.target.id === 'vr-button') return;
+
+      if (this.state === 'PAUSED') {
+        const action = this.checkPausePointerHit(e.clientX, e.clientY);
+        if (action === 'continue') {
+          this.continueGame();
+          return;
+        } else if (action === 'quit') {
+          this.quitGame();
+          return;
+        }
+        return;
+      }
 
       if (this.state === 'LEVEL_CLEARED') {
         const action = this.checkPointerHit(e.clientX, e.clientY);
@@ -171,7 +208,10 @@ class FloppyFlightGame {
 
     // Pointer hover cursor feedback
     window.addEventListener('pointermove', (e) => {
-      if (this.state === 'LEVEL_CLEARED') {
+      if (this.state === 'PAUSED') {
+        const action = this.checkPausePointerHit(e.clientX, e.clientY);
+        document.body.style.cursor = action ? 'pointer' : 'default';
+      } else if (this.state === 'LEVEL_CLEARED') {
         const action = this.checkPointerHit(e.clientX, e.clientY);
         document.body.style.cursor = action ? 'pointer' : 'default';
       } else {
@@ -205,6 +245,31 @@ class FloppyFlightGame {
     return null;
   }
 
+  checkPausePointerHit(clientX, clientY) {
+    if (!this.ui.pauseMesh || !this.ui.pauseMesh.visible) return null;
+    this.mouse.x = (clientX / window.innerWidth) * 2 - 1;
+    this.mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+    const intersects = this.raycaster.intersectObject(this.ui.pauseMesh);
+    if (intersects.length > 0 && intersects[0].uv) {
+      return this.ui.checkPauseMenuHit(intersects[0].uv);
+    }
+    return null;
+  }
+
+  checkPauseControllerHit(controller) {
+    if (!controller || !this.ui.pauseMesh || !this.ui.pauseMesh.visible) return null;
+    const tempMatrix = new THREE.Matrix4();
+    tempMatrix.identity().extractRotation(controller.matrixWorld);
+    this.controllerRaycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+    this.controllerRaycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+    const intersects = this.controllerRaycaster.intersectObject(this.ui.pauseMesh);
+    if (intersects.length > 0 && intersects[0].uv) {
+      return this.ui.checkPauseMenuHit(intersects[0].uv);
+    }
+    return null;
+  }
+
   setupResize() {
     window.addEventListener('resize', () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;
@@ -215,6 +280,7 @@ class FloppyFlightGame {
 
   resetToReady() {
     this.state = 'READY';
+    this.previousState = null;
     sound.isGameOver = false;
     this.score = 0;
     this.currentLevel = 1;
@@ -234,14 +300,43 @@ class FloppyFlightGame {
     this.ui.showReady(this.playerRig.position);
     this.ui.hideGameOver();
     this.ui.hideLevelCleared();
+    this.ui.hidePauseMenu();
   }
 
   startGame() {
     this.state = 'PLAYING';
+    this.previousState = null;
     sound.isGameOver = false;
     sound.startBGM();
     this.ui.hideReady();
     this.ui.hideLevelCleared();
+    this.ui.hidePauseMenu();
+  }
+
+  pauseGame() {
+    if (this.state !== 'PLAYING' && this.state !== 'LEVEL_CLEARED') return;
+    this.previousState = this.state;
+    this.state = 'PAUSED';
+    this.pauseSavedY = this.playerRig.position.y;
+    sound.setBGMVolume(0.12);
+    this.ui.showPauseMenu(this.playerRig.position);
+  }
+
+  continueGame() {
+    if (this.state !== 'PAUSED') return;
+    this.ui.hidePauseMenu();
+    document.body.style.cursor = 'default';
+    sound.setBGMVolume(0.38);
+    this.state = this.previousState || 'PLAYING';
+    this.previousState = null;
+  }
+
+  togglePause() {
+    if (this.state === 'PAUSED') {
+      this.continueGame();
+    } else if (this.state === 'PLAYING' || this.state === 'LEVEL_CLEARED') {
+      this.pauseGame();
+    }
   }
 
   triggerHaptic(strength = 0.6, durationMs = 80) {
@@ -257,6 +352,11 @@ class FloppyFlightGame {
 
   handleFlapInput(side = 'both') {
     sound.init();
+
+    if (this.state === 'PAUSED') {
+      // Flapping while paused does not trigger motion
+      return;
+    }
 
     if (this.state === 'READY') {
       sound.playFlap();
@@ -316,6 +416,7 @@ class FloppyFlightGame {
     this.enemyBirds.reset();
 
     this.ui.hideLevelCleared();
+    this.ui.hidePauseMenu();
 
     // Scale forward speed slightly with each level
     this.baseForwardSpeed = 7.5 + Math.min((this.currentLevel - 1) * 0.4, 3.5);
@@ -335,7 +436,9 @@ class FloppyFlightGame {
     document.body.style.cursor = 'default';
     this.currentLevel = 1;
     this.levelPipesCleared = 0;
+    this.previousState = null;
     this.ui.hideLevelCleared();
+    this.ui.hidePauseMenu();
     this.resetToReady();
   }
 
@@ -350,6 +453,33 @@ class FloppyFlightGame {
 
     this.triggerHaptic(1.0, 250);
     this.ui.showGameOver(this.playerRig.position);
+  }
+
+  detectControllerInputs(delta) {
+    if (!this.renderer.xr.isPresenting) return;
+    const session = this.renderer.xr.getSession();
+    if (!session) return;
+
+    let menuPressedNow = false;
+    for (const source of session.inputSources) {
+      if (source.gamepad && source.gamepad.buttons) {
+        const btns = source.gamepad.buttons;
+        // Check Menu button (button 5 or 4 on left/any controller)
+        if (source.handedness === 'left' || !source.handedness || source.handedness === 'none') {
+          if (btns[5]?.pressed || (btns.length > 4 && btns[4]?.pressed && btns.length <= 5)) {
+            menuPressedNow = true;
+          }
+        }
+        if (btns[5]?.pressed) {
+          menuPressedNow = true;
+        }
+      }
+    }
+
+    if (menuPressedNow && !this.menuButtonPrevPressed) {
+      this.togglePause();
+    }
+    this.menuButtonPrevPressed = menuPressedNow;
   }
 
   detectControllerFlaps(delta) {
@@ -396,8 +526,9 @@ class FloppyFlightGame {
       this.gameOverDelay -= delta;
     }
 
-    // VR controller motion tracking
+    // VR controller motion tracking & button inputs
     this.detectControllerFlaps(delta);
+    this.detectControllerInputs(delta);
 
     // State updates
     if (this.state === 'READY') {
@@ -405,6 +536,10 @@ class FloppyFlightGame {
       const hoverY = 5.0 + Math.sin(time * 0.003) * 0.2;
       this.playerRig.position.y = hoverY;
       this.pitchAngle = 0;
+    } else if (this.state === 'PAUSED') {
+      // Freeze position & hover stationary
+      this.playerRig.position.y = this.pauseSavedY;
+      this.pitchAngle = THREE.MathUtils.lerp(this.pitchAngle, 0, delta * 5.0);
     } else if (this.state === 'LEVEL_CLEARED') {
       // Gentle hover bobbing while viewing victory screen
       const hoverY = this.levelClearedSavedY + Math.sin(time * 0.003) * 0.12;

@@ -9,6 +9,7 @@ export class UIManager {
     this.readyBillboard = null;
     this.gameOverBillboard = null;
     this.levelClearedBillboard = null;
+    this.pauseBillboard = null;
 
     this.currentScore = 0;
     this.bestScore = 0;
@@ -17,6 +18,7 @@ export class UIManager {
     this.createReadyDisplay();
     this.createGameOverDisplay();
     this.createLevelClearedDisplay();
+    this.createPauseDisplay();
   }
 
   createCanvasTexture(drawFn, width = 512, height = 256) {
@@ -505,7 +507,7 @@ export class UIManager {
     // 7. Accessible shortcut hints at bottom
     c.font = '13px Arial, sans-serif';
     c.fillStyle = '#747d8c';
-    c.fillText('[Space / Enter] Next Level     [Q / Esc] Quit', w / 2, 442);
+    c.fillText('[Space / Enter] Next Level', w / 2, 442);
   }
 
   // Returns 'next', 'quit', or null based on normalized UV coordinates on levelClearedMesh
@@ -527,11 +529,172 @@ export class UIManager {
     return null;
   }
 
+  createPauseDisplay() {
+    const { texture, canvas, ctx } = this.createCanvasTexture((c, w, h) => {
+      this.drawPauseCanvas(c, w, h);
+    }, 640, 420);
+
+    this.pauseCanvas = canvas;
+    this.pauseCtx = ctx;
+    this.pauseTexture = texture;
+
+    const mat = new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      side: THREE.DoubleSide
+    });
+
+    const geom = new THREE.PlaneGeometry(3.0, 1.97);
+    this.pauseMesh = new THREE.Mesh(geom, mat);
+    this.pauseMesh.visible = false;
+    this.scene.add(this.pauseMesh);
+  }
+
+  drawPauseCanvas(c, w, h) {
+    c.clearRect(0, 0, w, h);
+
+    // 1. Warm rounded card background
+    c.fillStyle = 'rgba(255, 255, 255, 0.96)';
+    c.beginPath();
+    c.roundRect(24, 20, w - 48, h - 40, 36);
+    c.fill();
+
+    // Vibrant ocean blue border
+    c.strokeStyle = '#0984e3';
+    c.lineWidth = 8;
+    c.stroke();
+
+    // Inner soft blue accent border
+    c.strokeStyle = '#74b9ff';
+    c.lineWidth = 3;
+    c.strokeRect(36, 32, w - 72, h - 64);
+
+    // 2. Pause Top Badge
+    c.fillStyle = '#0984e3';
+    c.beginPath();
+    c.roundRect(w / 2 - 110, 38, 220, 42, 21);
+    c.fill();
+    c.strokeStyle = '#ffffff';
+    c.lineWidth = 3;
+    c.stroke();
+
+    c.font = 'bold 22px "Arial Black", Impact, sans-serif';
+    c.fillStyle = '#ffffff';
+    c.textAlign = 'center';
+    c.fillText('⏸ PAUSED', w / 2, 67);
+
+    // 3. Main Title
+    const titleText = 'GAME PAUSED';
+    c.font = 'bold 48px "Arial Black", Impact, sans-serif';
+    c.textAlign = 'center';
+
+    // Dark drop shadow
+    c.strokeStyle = '#1e3799';
+    c.lineWidth = 10;
+    c.lineJoin = 'round';
+    c.strokeText(titleText, w / 2, 138);
+
+    // White outline
+    c.strokeStyle = '#ffffff';
+    c.lineWidth = 6;
+    c.strokeText(titleText, w / 2, 134);
+
+    // Bubbly gradient fill
+    const titleGrad = c.createLinearGradient(0, 95, 0, 145);
+    titleGrad.addColorStop(0, '#0984e3');
+    titleGrad.addColorStop(1, '#00cec9');
+    c.fillStyle = titleGrad;
+    c.fillText(titleText, w / 2, 134);
+
+    // Subtitle
+    c.font = 'bold 18px Arial, sans-serif';
+    c.fillStyle = '#2f3542';
+    c.fillText('Take a breath and stretch your wings!', w / 2, 172);
+
+    // 4. CONTINUE Button (Primary, large and prominent)
+    const contW = 340;
+    const contH = 64;
+    const contX = w / 2 - contW / 2;
+    const contY = 210;
+
+    // Drop shadow
+    c.fillStyle = '#0d633e';
+    c.beginPath();
+    c.roundRect(contX, contY + 5, contW, contH, 32);
+    c.fill();
+
+    // Bright emerald gradient
+    const contGrad = c.createLinearGradient(0, contY, 0, contY + contH);
+    contGrad.addColorStop(0, '#2ed573');
+    contGrad.addColorStop(1, '#10ac84');
+    c.fillStyle = contGrad;
+    c.beginPath();
+    c.roundRect(contX, contY, contW, contH, 32);
+    c.fill();
+
+    // White outline
+    c.strokeStyle = '#ffffff';
+    c.lineWidth = 4;
+    c.stroke();
+
+    // Continue text
+    c.font = 'bold 28px "Arial Black", Impact, sans-serif';
+    c.fillStyle = '#ffffff';
+    c.fillText('▶ CONTINUE', w / 2, contY + 42);
+
+    // 5. QUIT GAME Button (Secondary, noticeably smaller to prevent accidental clicks)
+    const quitW = 180;
+    const quitH = 38;
+    const quitX = w / 2 - quitW / 2;
+    const quitY = 308;
+
+    // Subtle dark slate body
+    c.fillStyle = '#57606f';
+    c.beginPath();
+    c.roundRect(quitX, quitY, quitW, quitH, 19);
+    c.fill();
+
+    // Light muted border
+    c.strokeStyle = '#a4b0be';
+    c.lineWidth = 2;
+    c.stroke();
+
+    // Quit text
+    c.font = 'bold 16px Arial, sans-serif';
+    c.fillStyle = '#f1f2f6';
+    c.fillText('QUIT GAME', w / 2, quitY + 25);
+
+    // 6. Shortcut hint at bottom
+    c.font = '13px Arial, sans-serif';
+    c.fillStyle = '#747d8c';
+    c.fillText('[Esc / Menu] Continue', w / 2, 385);
+  }
+
+  // Returns 'continue', 'quit', or null based on normalized UV coordinates on pauseMesh
+  checkPauseMenuHit(uv) {
+    if (!uv) return null;
+    const u = uv.x;
+    const v = uv.y;
+
+    // Continue button: centered horizontally (u ~ 0.23 to 0.77), vertically (v ~ 0.33 to 0.52)
+    if (u >= 0.22 && u <= 0.78 && v >= 0.33 && v <= 0.52) {
+      return 'continue';
+    }
+
+    // Quit Game button: centered horizontally (u ~ 0.35 to 0.65), vertically (v ~ 0.16 to 0.28)
+    if (u >= 0.35 && u <= 0.65 && v >= 0.16 && v <= 0.28) {
+      return 'quit';
+    }
+
+    return null;
+  }
+
   showReady(playerPos) {
     this.readyMesh.visible = true;
     this.readyMesh.position.set(playerPos.x, playerPos.y, playerPos.z - 3.8);
     this.gameOverMesh.visible = false;
     if (this.levelClearedMesh) this.levelClearedMesh.visible = false;
+    if (this.pauseMesh) this.pauseMesh.visible = false;
   }
 
   hideReady() {
@@ -552,6 +715,7 @@ export class UIManager {
     this.gameOverMesh.visible = true;
     this.readyMesh.visible = false;
     if (this.levelClearedMesh) this.levelClearedMesh.visible = false;
+    if (this.pauseMesh) this.pauseMesh.visible = false;
   }
 
   hideGameOver() {
@@ -568,15 +732,30 @@ export class UIManager {
     );
     this.levelClearedTexture.needsUpdate = true;
 
-    this.levelClearedMesh.position.set(playerPos.x, playerPos.y, playerPos.z - 3.2);
+    this.levelClearedMesh.position.set(playerPos.x, Math.max(playerPos.y, 4.2), playerPos.z - 3.2);
     this.levelClearedMesh.visible = true;
     this.readyMesh.visible = false;
     this.gameOverMesh.visible = false;
+    if (this.pauseMesh) this.pauseMesh.visible = false;
   }
 
   hideLevelCleared() {
     if (this.levelClearedMesh) {
       this.levelClearedMesh.visible = false;
+    }
+  }
+
+  showPauseMenu(playerPos) {
+    this.pauseMesh.position.set(playerPos.x, Math.max(playerPos.y, 4.2), playerPos.z - 3.2);
+    this.pauseMesh.visible = true;
+    this.readyMesh.visible = false;
+    this.gameOverMesh.visible = false;
+    if (this.levelClearedMesh) this.levelClearedMesh.visible = false;
+  }
+
+  hidePauseMenu() {
+    if (this.pauseMesh) {
+      this.pauseMesh.visible = false;
     }
   }
 }
