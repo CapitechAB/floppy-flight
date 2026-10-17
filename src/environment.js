@@ -809,8 +809,10 @@ export class Environment {
       const z = -20 - Math.random() * 240;
 
       cloud.position.set(x, y, z);
-      // Local +Z is the face. Point it inward so the lane sees the smile.
-      cloud.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;
+      // Local +Z is the face. Orient it to face the player!
+      const dx = 0 - x;
+      const dz = 0 - z;
+      cloud.rotation.y = Math.atan2(dx, dz);
       cloud.userData = {
         baseY: y,
         speed: (isFar ? 0.35 : 0.75) + Math.random() * 0.5,
@@ -1091,7 +1093,7 @@ export class Environment {
     this.scene.add(this.sparkleParticles);
   }
 
-  update(delta, playerZ) {
+  update(delta, playerZ, playerY = 5.0) {
     this.elapsedTime += delta;
 
     // Sky dome stays centered around player
@@ -1150,7 +1152,7 @@ export class Environment {
       }
     }
 
-    // Drift smiling clouds with gentle floating bob
+    // Drift smiling clouds with gentle floating bob & face the player!
     for (let i = 0; i < this.clouds.length; i++) {
       const cloud = this.clouds[i];
       cloud.position.z += cloud.userData.speed * delta;
@@ -1164,7 +1166,18 @@ export class Environment {
         cloud.userData.side = side;
         cloud.position.z = playerZ - 200 - Math.random() * 60;
         cloud.position.x = side * (14 + Math.random() * (isFar ? 55 : 28));
-        cloud.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;
+      }
+
+      // Orient happy face (local +Z) to look directly at the player!
+      const dx = 0 - cloud.position.x;
+      const dz = playerZ - cloud.position.z;
+      cloud.rotation.y = Math.atan2(dx, dz);
+
+      // Subtle gentle gaze towards player altitude without distorting the flat bottom
+      const distXZ = Math.hypot(dx, dz);
+      if (distXZ > 0.1) {
+        const dy = playerY - cloud.position.y;
+        cloud.rotation.x = THREE.MathUtils.clamp(Math.atan2(dy, distXZ) * 0.45, -0.15, 0.12);
       }
     }
 

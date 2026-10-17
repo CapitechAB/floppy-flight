@@ -281,9 +281,10 @@ namespace FloppyFlight.Editor
             var cloud = new GameObject("Cloud");
             cloud.transform.position = position;
             cloud.transform.localScale = Vector3.one * scale;
-            // The mesh face is +Z. Turn it toward the lane.
-            var yaw = position.x >= 0f ? -90f : 90f;
-            cloud.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+            // The mesh face is +Z. Orient it to face toward the player's start position (0, 5, 0).
+            var toPlayer = new Vector3(0f, 5f, 0f) - position;
+            toPlayer.y = 0f; // Keep upright
+            cloud.transform.rotation = toPlayer.sqrMagnitude > 0.01f ? Quaternion.LookRotation(toPlayer.normalized, Vector3.up) : Quaternion.identity;
 
             var filter = cloud.AddComponent<MeshFilter>();
             filter.sharedMesh = CloudMeshBuilder.GetOrCreate(variant);

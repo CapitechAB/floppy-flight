@@ -315,8 +315,8 @@ class FloppyFlightGame {
     // Avatar wing/beak animation
     this.avatar.update(delta, this.pitchAngle, this.renderer.xr.isPresenting, this.controllerVelocityY);
 
-    // Environment scrolling
-    this.environment.update(delta, this.playerRig.position.z);
+    // Environment scrolling & cloud face tracking
+    this.environment.update(delta, this.playerRig.position.z, this.playerRig.position.y);
 
     // Render
     this.renderer.render(this.scene, this.camera);
