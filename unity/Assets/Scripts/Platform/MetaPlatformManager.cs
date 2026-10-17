@@ -1,6 +1,7 @@
 using UnityEngine;
 using Oculus.Platform;
 using Oculus.Platform.Models;
+using Application = UnityEngine.Application;
 
 namespace FloppyFlight.Platform
 {
