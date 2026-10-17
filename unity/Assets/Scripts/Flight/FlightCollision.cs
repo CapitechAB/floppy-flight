@@ -5,8 +5,8 @@ using UnityEngine;
 namespace FloppyFlight.Flight
 {
     /// <summary>
-    /// Ends a run when the headset proxy hits a pipe or the ground.
-    /// PipePair itself has no collision logic; this lives on the eye anchor.
+    /// Ends a run when the headset proxy hits a pipe, a floppy bird, or the ground.
+    /// PipePair and FloppyBird have no collision logic of their own; this lives on the eye anchor.
     /// </summary>
     public class FlightCollision : MonoBehaviour
     {
@@ -20,7 +20,9 @@ namespace FloppyFlight.Flight
 
         void OnTriggerEnter(Collider other)
         {
-            if (other != null && other.GetComponentInParent<PipePair>() != null)
+            if (other == null) return;
+            if (other.GetComponentInParent<PipePair>() != null ||
+                other.GetComponentInParent<FloppyBird>() != null)
                 TryCrash();
         }
 

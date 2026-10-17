@@ -15,6 +15,7 @@ namespace FloppyFlight.Managers
         [Header("System References")]
         [SerializeField] private FlapFlightController flightController;
         [SerializeField] private PipeSpawner pipeSpawner;
+        [SerializeField] private BirdSpawner birdSpawner;
         [SerializeField] private BirdAvatarController avatarController;
 
         [Header("Audio")]
@@ -58,7 +59,8 @@ namespace FloppyFlight.Managers
             currentState = GameState.Ready;
             currentScore = 0;
             flightController.ResetPosition(new Vector3(0, 5.0f, 0));
-            pipeSpawner.ResetPipes(-18f);
+            pipeSpawner.ResetPipes(PipeSpawner.FirstPipeZ);
+            if (birdSpawner != null) birdSpawner.ResetBirds();
             if (bgmAudioSource) bgmAudioSource.volume = 0.38f;
         }
 
@@ -99,7 +101,9 @@ namespace FloppyFlight.Managers
 
             if (currentState == GameState.Flying)
             {
-                pipeSpawner.UpdatePipes(flightController.transform.position.z, OnPointScored);
+                var playerZ = flightController.transform.position.z;
+                pipeSpawner.UpdatePipes(playerZ, OnPointScored);
+                if (birdSpawner != null) birdSpawner.UpdateBirds(playerZ);
             }
         }
 
