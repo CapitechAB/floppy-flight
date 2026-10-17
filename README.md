@@ -65,7 +65,7 @@ Open `unity/` in that editor with Android Build Support (SDK, NDK, OpenJDK). Pac
 | :--- | :--- |
 | Company / product | Capitech AB / Floppy Flight |
 | Package name | `com.capitechab.floppyflight` |
-| Version | `1.0.0` (version code from `ANDROID_VERSION_CODE`, or the GitHub run number in CI) |
+| Version | `1.0.0`. versionCode comes from `ANDROID_VERSION_CODE`, or the GitHub run number in CI. `0` is raised to `1`. Horizon accepts any positive code on the first upload; later uploads must be higher. |
 | Scripting backend | IL2CPP, ARM64 only |
 | Min / target API | 32 / 34 (Android 14). New Horizon apps created after 1 March 2026 must target API 34. |
 | Graphics | Vulkan only, linear color space, multithreaded rendering |
@@ -77,9 +77,9 @@ Open `unity/` in that editor with Android Build Support (SDK, NDK, OpenJDK). Pac
 
 The release scene is generated into `Assets/Scenes/Main.unity` the first time the editor or the build script runs, because the scripts shipped without a scene. That scene wires the background track plus the flap, bonk, game-over, "Fight", "Uh ooh", and score-announcer clips under `Assets/Audio`. OpenXR assets under `Assets/XR/` and `Packages/packages-lock.json` are also written on that first import. Commit those after a successful editor open so later builds stay reproducible. The build writes the Meta Platform mobile app id and expects a leaderboard whose API name is `floppy_highscores`.
 
-### Local signed `.aab`
+### Local signed `.apk`
 
-Do not commit a keystore or a password. From a shell that has an activated Unity 6000.0.83f1 editor:
+The Horizon Developer Dashboard upload is a signed release APK (arm64, no OBB, target API 34, APK Signature Scheme v2). Do not commit a keystore or a password. From a shell that has an activated Unity 6000.0.83f1 editor:
 
 ```bash
 export ANDROID_KEYSTORE_PATH=/path/to/upload.keystore
@@ -90,15 +90,15 @@ export META_APP_ID='0000000000000000'
 
 Unity -batchmode -nographics -quit \
   -projectPath unity \
-  -executeMethod FloppyFlight.Editor.BuildScript.BuildAndroidAab \
+  -executeMethod FloppyFlight.Editor.BuildScript.BuildAndroidApk \
   -logFile -
 ```
 
-`ANDROID_KEYSTORE_BASE64` can be used instead of a path. The `.aab` is written to `unity/Builds/FloppyFlight.aab` unless `-customBuildPath` or `AAB_OUTPUT` is set. Passwords are cleared from Player Settings after the build.
+`ANDROID_KEYSTORE_BASE64` can be used instead of a path. The APK is written to `build/Android/FloppyFlight.apk` unless `-customBuildPath` or `APK_OUTPUT` is set. `BuildAndroidAab` still writes an App Bundle. Passwords are cleared from Player Settings after the build. The script does not turn off v2 signing.
 
 ### GitHub Actions
 
-[`.github/workflows/quest-release-aab.yml`](.github/workflows/quest-release-aab.yml) uses `game-ci/unity-builder@v4` to build the signed `.aab` and upload it as the `FloppyFlight-Quest-release` artifact. Run it from the Actions tab, or by pushing a change under `unity/`.
+[`.github/workflows/quest-release-aab.yml`](.github/workflows/quest-release-aab.yml) uses `game-ci/unity-builder@v4` to build the signed APK and upload it as the `FloppyFlight-Quest-release-apk` artifact. Run it from the Actions tab, or by pushing a change under `unity/`. The workflow dispatch input `package` can be set to `aab` to build an App Bundle instead.
 
 Create these **repository secrets** before the first run ([GameCI license activation](https://game.ci/docs/github/activation)):
 
@@ -115,7 +115,7 @@ Create these **repository secrets** before the first run ([GameCI license activa
 
 Also create a leaderboard in that dashboard whose API name is exactly `floppy_highscores`.
 
-This environment does not have Unity installed and does not have those secrets, so a signed `.aab` cannot be produced here. The workflow is what produces it once the secrets exist.
+This environment does not have Unity installed and does not have those secrets, so a signed APK cannot be produced here. The workflow is what produces it once the secrets exist.
 
 ### Store listing assets
 
