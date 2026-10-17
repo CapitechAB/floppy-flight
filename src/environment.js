@@ -13,6 +13,10 @@ export class Environment {
     this.windmills = [];
     this.bgBirds = [];
     this.grassTufts = [];
+    this.sideTrees = [];
+    this.sideTerraces = [];
+    this.treelinePlanes = [];
+    this.vFlock = null;
     this.elapsedTime = 0;
     this.leafParticles = null;
     this.sparkleParticles = null;
@@ -23,6 +27,8 @@ export class Environment {
     this.createSkyDome();
     this.createSunAndLighting();
     this.createGround();
+    this.createSideForest();
+    this.createSideTerraces();
     this.createGrassTufts();
     this.createFloatingIslands();
     this.createSmilingClouds();
@@ -227,6 +233,345 @@ export class Environment {
 
     this.scene.add(groundGroup);
     this.groundGroup = groundGroup;
+  }
+
+  createTreelineTexture(isFar = false) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, 512, 128);
+
+    // Stepped pixel pine tree
+    function drawSteppedPine(cx, baseY, w, h, darkColor, midColor, lightColor, highlightColor) {
+      const tiers = 3;
+      for (let t = 0; t < tiers; t++) {
+        const tierH = h * (0.38 - t * 0.05);
+        const tierW = w * (1.0 - t * 0.28);
+        const yTop = baseY - h + t * (h * 0.25);
+
+        ctx.fillStyle = darkColor;
+        const steps = 6;
+        for (let s = 0; s <= steps; s++) {
+          const frac = s / steps;
+          const currY = yTop + frac * tierH;
+          const halfW = (frac * tierW) / 2;
+          ctx.fillRect(Math.round(cx - halfW), Math.round(currY), Math.round(halfW * 2), Math.round(tierH / steps) + 1);
+        }
+
+        ctx.fillStyle = midColor;
+        for (let s = 1; s < steps; s++) {
+          const frac = s / steps;
+          const currY = yTop + frac * tierH;
+          const halfW = (frac * tierW * 0.75) / 2;
+          ctx.fillRect(Math.round(cx - halfW), Math.round(currY), Math.round(halfW * 2), Math.round(tierH / steps));
+        }
+
+        ctx.fillStyle = lightColor;
+        for (let s = 1; s < steps - 1; s++) {
+          const frac = s / steps;
+          const currY = yTop + frac * tierH;
+          const halfW = (frac * tierW * 0.45) / 2;
+          ctx.fillRect(Math.round(cx - halfW + 2), Math.round(currY), Math.round(halfW * 2), Math.round(tierH / steps));
+        }
+
+        ctx.fillStyle = highlightColor;
+        ctx.fillRect(Math.round(cx - 3), Math.round(yTop), 7, 3);
+        ctx.fillRect(Math.round(cx + 1), Math.round(yTop + 3), 4, 3);
+      }
+    }
+
+    // Stepped pixel round oak tree
+    function drawSteppedOak(cx, baseY, radius, darkColor, midColor, lightColor, highlightColor) {
+      const subSpheres = [
+        { ox: 0, oy: -radius * 0.8, r: radius * 0.9 },
+        { ox: -radius * 0.5, oy: -radius * 0.5, r: radius * 0.7 },
+        { ox: radius * 0.5, oy: -radius * 0.5, r: radius * 0.7 },
+        { ox: 0, oy: -radius * 1.1, r: radius * 0.6 }
+      ];
+
+      ctx.fillStyle = darkColor;
+      for (const s of subSpheres) {
+        const x0 = cx + s.ox;
+        const y0 = baseY + s.oy;
+        const r = s.r;
+        for (let dy = -r; dy <= r; dy += 4) {
+          const halfW = Math.sqrt(Math.max(0, r * r - dy * dy));
+          ctx.fillRect(Math.round(x0 - halfW), Math.round(y0 + dy), Math.round(halfW * 2), 5);
+        }
+      }
+
+      ctx.fillStyle = midColor;
+      for (const s of subSpheres) {
+        const x0 = cx + s.ox + 1;
+        const y0 = baseY + s.oy - 1;
+        const r = s.r * 0.78;
+        for (let dy = -r; dy <= r; dy += 4) {
+          const halfW = Math.sqrt(Math.max(0, r * r - dy * dy));
+          ctx.fillRect(Math.round(x0 - halfW), Math.round(y0 + dy), Math.round(halfW * 2), 5);
+        }
+      }
+
+      ctx.fillStyle = lightColor;
+      for (const s of subSpheres) {
+        const x0 = cx + s.ox + 3;
+        const y0 = baseY + s.oy - 4;
+        const r = s.r * 0.5;
+        for (let dy = -r; dy <= r; dy += 4) {
+          const halfW = Math.sqrt(Math.max(0, r * r - dy * dy));
+          ctx.fillRect(Math.round(x0 - halfW), Math.round(y0 + dy), Math.round(halfW * 2), 5);
+        }
+      }
+
+      ctx.fillStyle = highlightColor;
+      for (const s of subSpheres) {
+        ctx.fillRect(Math.round(cx + s.ox - 2), Math.round(baseY + s.oy - s.r), 6, 3);
+        ctx.fillRect(Math.round(cx + s.ox + 2), Math.round(baseY + s.oy - s.r + 3), 4, 3);
+      }
+    }
+
+    if (isFar) {
+      // Distant ridge
+      for (let x = -20; x <= 530; x += 36) {
+        if ((x % 72) === 0) {
+          drawSteppedPine(x, 128, 40, 58, '#244c35', '#2f6043', '#3f7c57', '#7dc495');
+        } else {
+          drawSteppedOak(x, 128, 28, '#244c35', '#2f6043', '#3f7c57', '#7dc495');
+        }
+      }
+      for (let x = -10; x <= 530; x += 44) {
+        if ((x % 88) === 0) {
+          drawSteppedPine(x, 128, 46, 72, '#1a3f2d', '#23523c', '#2c6d4f', '#96dbae');
+        } else {
+          drawSteppedOak(x, 128, 32, '#1a3f2d', '#23523c', '#2c6d4f', '#96dbae');
+        }
+      }
+      ctx.fillStyle = '#122e20';
+      ctx.fillRect(0, 105, 512, 23);
+    } else {
+      // Foreground lush ridge with golden sunrise highlights
+      for (let x = -20; x <= 530; x += 40) {
+        drawSteppedOak(x, 128, 26, '#264e36', '#316645', '#45855c', '#89d4a3');
+      }
+      for (let x = -10; x <= 530; x += 48) {
+        if ((x % 96) === 0) {
+          drawSteppedPine(x, 128, 48, 76, '#1b4332', '#245942', '#2d7a56', '#a3e6be');
+        } else {
+          drawSteppedOak(x, 128, 32, '#1b4332', '#245942', '#2d7a56', '#a3e6be');
+        }
+      }
+      for (let x = 8; x <= 530; x += 56) {
+        if ((x % 112) === 0) {
+          drawSteppedPine(x, 128, 52, 90, '#133624', '#1c4a32', '#246342', '#ffd32a');
+        } else {
+          drawSteppedOak(x, 128, 38, '#133624', '#1c4a32', '#246342', '#ffd32a');
+        }
+      }
+      ctx.fillStyle = '#133624';
+      ctx.fillRect(0, 105, 512, 23);
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.LinearFilter;
+    tex.repeat.set(6, 1);
+    return tex;
+  }
+
+  createSideForest() {
+    // 1. Layered Pixel-Art Treeline Billboard Ridges (Proportional height framing the ground)
+    const nearTex = this.createTreelineTexture(false);
+    const farTex = this.createTreelineTexture(true);
+
+    const nearTreelineMat = new THREE.MeshBasicMaterial({
+      map: nearTex,
+      transparent: true,
+      alphaTest: 0.15,
+      side: THREE.DoubleSide
+    });
+
+    const farTreelineMat = new THREE.MeshBasicMaterial({
+      map: farTex,
+      transparent: true,
+      alphaTest: 0.15,
+      side: THREE.DoubleSide
+    });
+
+    // Inner treeline planes (X = ±27m, 7.5m tall sitting at ground level)
+    const innerGeom = new THREE.PlaneGeometry(360, 7.5);
+    const leftInner = new THREE.Mesh(innerGeom, nearTreelineMat);
+    leftInner.position.set(-27, 3.75, -120);
+    leftInner.rotation.y = Math.PI / 2 + 0.04;
+    this.scene.add(leftInner);
+    this.treelinePlanes.push(leftInner);
+
+    const rightInner = new THREE.Mesh(innerGeom, nearTreelineMat);
+    rightInner.position.set(27, 3.75, -120);
+    rightInner.rotation.y = -Math.PI / 2 - 0.04;
+    this.scene.add(rightInner);
+    this.treelinePlanes.push(rightInner);
+
+    // Outer treeline planes (X = ±46m, 11m tall background ridge)
+    const outerGeom = new THREE.PlaneGeometry(420, 11.0);
+    const leftOuter = new THREE.Mesh(outerGeom, farTreelineMat);
+    leftOuter.position.set(-46, 5.5, -120);
+    leftOuter.rotation.y = Math.PI / 2 + 0.02;
+    this.scene.add(leftOuter);
+    this.treelinePlanes.push(leftOuter);
+
+    const rightOuter = new THREE.Mesh(outerGeom, farTreelineMat);
+    rightOuter.position.set(46, 5.5, -120);
+    rightOuter.rotation.y = -Math.PI / 2 - 0.02;
+    this.scene.add(rightOuter);
+    this.treelinePlanes.push(rightOuter);
+
+    // 2. Procedural 3D Cartoon Trees (Foreground & Midground with real stereo volume & shadows)
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x784e2d, roughness: 0.8 });
+    const pineColors = [0x1e824c, 0x27ae60, 0x2ecc71];
+    const oakMats = [
+      new THREE.MeshStandardMaterial({ color: 0x4cd137, roughness: 0.35 }),
+      new THREE.MeshStandardMaterial({ color: 0x44bd32, roughness: 0.35 }),
+      new THREE.MeshStandardMaterial({ color: 0x7bed9f, roughness: 0.35 })
+    ];
+
+    const spawnTree = (type, x, z, scale = 1.0) => {
+      const tree = new THREE.Group();
+
+      if (type === 'pine') {
+        const trunkGeom = new THREE.CylinderGeometry(0.22 * scale, 0.32 * scale, 1.2 * scale, 6);
+        const trunk = new THREE.Mesh(trunkGeom, trunkMat);
+        trunk.position.y = 0.6 * scale;
+        trunk.castShadow = true;
+        tree.add(trunk);
+
+        // 3 stepped conical pine tiers
+        for (let c = 0; c < 3; c++) {
+          const coneGeom = new THREE.ConeGeometry((1.5 - c * 0.3) * scale, (1.6 - c * 0.22) * scale, 7);
+          const coneMat = new THREE.MeshStandardMaterial({ color: pineColors[c], roughness: 0.4 });
+          const cone = new THREE.Mesh(coneGeom, coneMat);
+          cone.position.y = (1.5 + c * 0.95) * scale;
+          cone.castShadow = true;
+          cone.receiveShadow = true;
+          tree.add(cone);
+        }
+      } else {
+        // Round fluffy oak tree
+        const trunkGeom = new THREE.CylinderGeometry(0.28 * scale, 0.42 * scale, 1.8 * scale, 6);
+        const trunk = new THREE.Mesh(trunkGeom, trunkMat);
+        trunk.position.y = 0.9 * scale;
+        trunk.castShadow = true;
+        tree.add(trunk);
+
+        const c1 = new THREE.Mesh(new THREE.SphereGeometry(1.25 * scale, 7, 7), oakMats[0]);
+        c1.position.y = 2.4 * scale;
+        c1.scale.set(1.2, 0.95, 1.1);
+        c1.castShadow = true;
+        tree.add(c1);
+
+        const c2 = new THREE.Mesh(new THREE.SphereGeometry(0.95 * scale, 6, 6), oakMats[1]);
+        c2.position.set(0.6 * scale, 2.7 * scale, 0.4 * scale);
+        c2.castShadow = true;
+        tree.add(c2);
+
+        const c3 = new THREE.Mesh(new THREE.SphereGeometry(0.75 * scale, 6, 6), oakMats[2]);
+        c3.position.set(-0.5 * scale, 2.8 * scale, -0.3 * scale);
+        c3.castShadow = true;
+        tree.add(c3);
+      }
+
+      tree.position.set(x, 0, z);
+      this.scene.add(tree);
+      this.sideTrees.push({ group: tree, x, initialZ: z });
+    };
+
+    // Spawn 48 trees along both sides
+    const treeCount = 48;
+    for (let i = 0; i < treeCount; i++) {
+      const side = (i % 2 === 0) ? -1 : 1;
+      const type = (i % 3 === 0) ? 'oak' : 'pine';
+      const x = side * (13.5 + (i % 5) * 3.2 + Math.random() * 2.5);
+      const z = -6 - (i * 4.5) + (Math.random() - 0.5) * 5.0;
+      const scale = 0.95 + Math.random() * 0.55;
+      spawnTree(type, x, z, scale);
+    }
+  }
+
+  createSideTerraces() {
+    // Generate diagonal green-and-lime striped curb texture matching the reference image!
+    const curbCanvas = document.createElement('canvas');
+    curbCanvas.width = 64;
+    curbCanvas.height = 64;
+    const cctx = curbCanvas.getContext('2d');
+    cctx.fillStyle = '#78e08f';
+    cctx.fillRect(0, 0, 64, 64);
+    cctx.fillStyle = '#2ecc71';
+    cctx.beginPath();
+    cctx.moveTo(0, 0); cctx.lineTo(32, 0); cctx.lineTo(0, 32); cctx.fill();
+    cctx.beginPath();
+    cctx.moveTo(32, 0); cctx.lineTo(64, 0); cctx.lineTo(0, 64); cctx.fill();
+    cctx.beginPath();
+    cctx.moveTo(64, 32); cctx.lineTo(64, 64); cctx.lineTo(32, 64); cctx.fill();
+
+    const curbTex = new THREE.CanvasTexture(curbCanvas);
+    curbTex.wrapS = THREE.RepeatWrapping;
+    curbTex.wrapT = THREE.RepeatWrapping;
+    curbTex.repeat.set(1, 10);
+
+    const earthMat = new THREE.MeshStandardMaterial({
+      color: 0x8c532b,
+      roughness: 0.9,
+      metalness: 0.05
+    });
+
+    const grassPlateauMat = new THREE.MeshStandardMaterial({
+      color: 0x68d374,
+      roughness: 0.65
+    });
+
+    const curbMat = new THREE.MeshStandardMaterial({
+      map: curbTex,
+      roughness: 0.4
+    });
+
+    const spawnTerrace = (x, z, width = 7.0, height = 1.9, length = 18.0) => {
+      const group = new THREE.Group();
+
+      // Earth body
+      const bodyGeom = new THREE.BoxGeometry(width, height, length);
+      const body = new THREE.Mesh(bodyGeom, earthMat);
+      body.position.y = height / 2;
+      body.castShadow = true;
+      body.receiveShadow = true;
+      group.add(body);
+
+      // Grass top
+      const topGeom = new THREE.BoxGeometry(width + 0.1, 0.12, length + 0.1);
+      const top = new THREE.Mesh(topGeom, grassPlateauMat);
+      top.position.y = height + 0.06;
+      top.receiveShadow = true;
+      group.add(top);
+
+      // Striped curb along the inner edge facing the runway
+      const curbGeom = new THREE.BoxGeometry(0.35, 0.22, length + 0.1);
+      const curb = new THREE.Mesh(curbGeom, curbMat);
+      const innerX = (x > 0) ? (-width / 2) : (width / 2);
+      curb.position.set(innerX, height + 0.1, 0);
+      curb.receiveShadow = true;
+      group.add(curb);
+
+      group.position.set(x, 0, z);
+      this.scene.add(group);
+      this.sideTerraces.push({ group, x, initialZ: z });
+    };
+
+    // Spawn 4 prominent raised ledges along the flanks
+    spawnTerrace(17.5, -35, 6.5, 1.8, 16);
+    spawnTerrace(-18.0, -75, 7.0, 2.0, 18);
+    spawnTerrace(19.0, -125, 6.5, 1.9, 16);
+    spawnTerrace(-18.5, -170, 7.0, 2.1, 18);
   }
 
   createGrassTufts() {
@@ -443,48 +788,190 @@ export class Environment {
   }
 
   createBackgroundBirds() {
-    // Cute round cartoon birds fluttering in the sky (blue, orange, purple)
-    const birdColors = [0x54a0ff, 0xff9f43, 0xa55eea];
+    this.bgBirds = [];
 
-    for (let i = 0; i < 4; i++) {
+    // Helper to create a cute inspiration bird
+    const createBirdModel = (config) => {
       const bird = new THREE.Group();
-      const col = birdColors[i % birdColors.length];
-      const bodyMat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.4 });
-      const beakMat = new THREE.MeshStandardMaterial({ color: 0xffa502 });
-      const wingMat = new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide });
 
-      // Round chubby body
-      const body = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 8), bodyMat);
-      body.scale.set(1.1, 0.9, 1.3);
+      const bodyMat = new THREE.MeshStandardMaterial({ color: config.bodyColor, roughness: 0.35 });
+      const bellyMat = new THREE.MeshStandardMaterial({ color: config.bellyColor || 0xffffff, roughness: 0.4 });
+      const beakMat = new THREE.MeshStandardMaterial({ color: config.beakColor || 0xffa502, roughness: 0.3 });
+      const eyeMatWhite = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      const eyeMatPupil = new THREE.MeshBasicMaterial({ color: 0x1e272e });
+      const wingMat = new THREE.MeshStandardMaterial({ color: config.wingColor || 0xffffff, side: THREE.DoubleSide, roughness: 0.35 });
+
+      // 1. Chubby round body
+      const scale = config.scale || 1.0;
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.40 * scale, 12, 10), bodyMat);
+      body.scale.set(1.15, 0.95, 1.25);
+      body.castShadow = true;
       bird.add(body);
 
-      // Beak
-      const beak = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.22, 4), beakMat);
+      // 2. Belly patch on underside/front
+      const belly = new THREE.Mesh(new THREE.SphereGeometry(0.36 * scale, 10, 8), bellyMat);
+      belly.position.set(0, -0.06 * scale, 0.12 * scale);
+      belly.scale.set(0.9, 0.85, 1.05);
+      bird.add(belly);
+
+      // 3. Big cute expressive cartoon eyes!
+      const eyeGeom = new THREE.SphereGeometry(0.12 * scale, 8, 8);
+      const pupilGeom = new THREE.SphereGeometry(0.065 * scale, 6, 6);
+      const shineGeom = new THREE.SphereGeometry(0.025 * scale, 4, 4);
+
+      // Left eye
+      const leftEye = new THREE.Mesh(eyeGeom, eyeMatWhite);
+      leftEye.position.set(-0.16 * scale, 0.12 * scale, 0.30 * scale);
+      const leftPupil = new THREE.Mesh(pupilGeom, eyeMatPupil);
+      leftPupil.position.set(-0.17 * scale, 0.13 * scale, 0.40 * scale);
+      const leftShine = new THREE.Mesh(shineGeom, eyeMatWhite);
+      leftShine.position.set(-0.15 * scale, 0.15 * scale, 0.45 * scale);
+      bird.add(leftEye);
+      bird.add(leftPupil);
+      bird.add(leftShine);
+
+      // Right eye
+      const rightEye = new THREE.Mesh(eyeGeom, eyeMatWhite);
+      rightEye.position.set(0.16 * scale, 0.12 * scale, 0.30 * scale);
+      const rightPupil = new THREE.Mesh(pupilGeom, eyeMatPupil);
+      rightPupil.position.set(0.17 * scale, 0.13 * scale, 0.40 * scale);
+      const rightShine = new THREE.Mesh(shineGeom, eyeMatWhite);
+      rightShine.position.set(0.15 * scale, 0.15 * scale, 0.45 * scale);
+      bird.add(rightEye);
+      bird.add(rightPupil);
+      bird.add(rightShine);
+
+      // 4. Beak cone
+      const beak = new THREE.Mesh(new THREE.ConeGeometry(0.12 * scale, 0.30 * scale, 4), beakMat);
       beak.rotation.x = Math.PI / 2;
-      beak.position.set(0, 0, 0.45);
+      beak.position.set(0, -0.02 * scale, 0.52 * scale);
       bird.add(beak);
 
-      // Wings
-      const wingGeom = new THREE.ConeGeometry(0.18, 0.45, 3);
-      wingGeom.rotateZ(Math.PI / 2);
-      const leftWing = new THREE.Mesh(wingGeom, wingMat);
-      leftWing.position.set(-0.35, 0.05, 0);
-      const rightWing = new THREE.Mesh(wingGeom, wingMat);
-      rightWing.position.set(0.35, 0.05, 0);
-      rightWing.rotation.z = Math.PI;
+      // 5. Wings (animated flapping)
+      const wingGeom = new THREE.PlaneGeometry(0.55 * scale, 0.35 * scale);
+      wingGeom.translate(0.28 * scale, 0, 0);
 
-      bird.add(leftWing);
-      bird.add(rightWing);
+      const leftWingGroup = new THREE.Group();
+      leftWingGroup.position.set(-0.40 * scale, 0.05 * scale, 0);
+      const leftWingMesh = new THREE.Mesh(wingGeom, wingMat);
+      leftWingMesh.rotation.y = Math.PI;
+      leftWingGroup.add(leftWingMesh);
+      bird.add(leftWingGroup);
 
-      bird.position.set(
-        (i % 2 === 0 ? -1 : 1) * (14 + Math.random() * 18),
-        10 + Math.random() * 8,
-        -40 - i * 35
-      );
+      const rightWingGroup = new THREE.Group();
+      rightWingGroup.position.set(0.40 * scale, 0.05 * scale, 0);
+      const rightWingMesh = new THREE.Mesh(wingGeom, wingMat);
+      rightWingGroup.add(rightWingMesh);
+      bird.add(rightWingGroup);
 
+      bird.position.set(config.x, config.y, config.z);
       this.scene.add(bird);
-      this.bgBirds.push({ group: bird, leftWing, rightWing, phase: i * 1.5, speed: 2.2 });
+
+      return {
+        group: bird,
+        leftWing: leftWingGroup,
+        rightWing: rightWingGroup,
+        phase: config.phase || 0,
+        speed: config.speed || 1.8,
+        initialX: config.x,
+        initialY: config.y
+      };
+    };
+
+    // 1. Classic Blue Flappy Bird on Left Flank (from inspiration art!)
+    this.bgBirds.push(createBirdModel({
+      bodyColor: 0x0abde3,
+      bellyColor: 0xffffff,
+      wingColor: 0xffffff,
+      beakColor: 0xffa502,
+      x: -14.5,
+      y: 9.5,
+      z: -30,
+      scale: 1.15,
+      phase: 0.0,
+      speed: 2.1
+    }));
+
+    // 2. Chubby Coral-Orange Bird on Right Flank
+    this.bgBirds.push(createBirdModel({
+      bodyColor: 0xff6b6b,
+      bellyColor: 0xfeca57,
+      wingColor: 0xffffff,
+      beakColor: 0xff9f43,
+      x: 14.8,
+      y: 8.8,
+      z: -48,
+      scale: 1.1,
+      phase: 1.4,
+      speed: 2.3
+    }));
+
+    // 3. Purple Soaring Bird High on Right
+    this.bgBirds.push(createBirdModel({
+      bodyColor: 0x9b59b6,
+      bellyColor: 0xe056fd,
+      wingColor: 0xffffff,
+      beakColor: 0xf1c40f,
+      x: 21.0,
+      y: 14.8,
+      z: -36,
+      scale: 1.05,
+      phase: 2.8,
+      speed: 1.9
+    }));
+
+    // 4. Terracotta Brown Bird Cruising on Left
+    this.bgBirds.push(createBirdModel({
+      bodyColor: 0xcd6133,
+      bellyColor: 0xf7d794,
+      wingColor: 0xffffff,
+      beakColor: 0xe67e22,
+      x: -19.5,
+      y: 12.5,
+      z: -70,
+      scale: 1.0,
+      phase: 4.2,
+      speed: 2.0
+    }));
+
+    // 5. Slate-Blue Songbird on Right
+    this.bgBirds.push(createBirdModel({
+      bodyColor: 0x4b7bec,
+      bellyColor: 0xfff200,
+      wingColor: 0xffffff,
+      beakColor: 0xff9f43,
+      x: 18.5,
+      y: 11.2,
+      z: -95,
+      scale: 0.95,
+      phase: 5.1,
+      speed: 2.2
+    }));
+
+    // 6. Distant V-Formation Bird Flock Soaring Across Horizon Sunburst
+    const flockGroup = new THREE.Group();
+    const vBirdMat = new THREE.MeshBasicMaterial({ color: 0x2c3e50, side: THREE.DoubleSide });
+    const vWingGeom = new THREE.PlaneGeometry(0.65, 0.22);
+
+    for (let f = 0; f < 7; f++) {
+      const vBird = new THREE.Group();
+      const leftW = new THREE.Mesh(vWingGeom, vBirdMat);
+      leftW.position.set(-0.30, 0, 0);
+      leftW.rotation.z = 0.35;
+      const rightW = new THREE.Mesh(vWingGeom, vBirdMat);
+      rightW.position.set(0.30, 0, 0);
+      rightW.rotation.z = -0.35;
+      vBird.add(leftW);
+      vBird.add(rightW);
+
+      const row = Math.abs(f - 3);
+      vBird.position.set((f - 3) * 3.2, -row * 1.4, row * 2.5);
+      flockGroup.add(vBird);
     }
+
+    flockGroup.position.set(12, 19, -155);
+    this.scene.add(flockGroup);
+    this.vFlock = flockGroup;
   }
 
   createSwirlingParticles() {
@@ -630,19 +1117,49 @@ export class Environment {
       }
     }
 
-    // Animate cute background birds
+    // Animate and recycle 3D side trees
+    for (let i = 0; i < this.sideTrees.length; i++) {
+      const tree = this.sideTrees[i];
+      if (tree.group.position.z > playerZ + 25) {
+        tree.group.position.z = playerZ - 180 - Math.random() * 35;
+      }
+    }
+
+    // Animate and recycle side terraces
+    for (let i = 0; i < this.sideTerraces.length; i++) {
+      const terrace = this.sideTerraces[i];
+      if (terrace.group.position.z > playerZ + 30) {
+        terrace.group.position.z = playerZ - 200 - Math.random() * 40;
+      }
+    }
+
+    // Treeline billboard planes follow playerZ for seamless forest valley
+    for (let i = 0; i < this.treelinePlanes.length; i++) {
+      this.treelinePlanes[i].position.z = playerZ - 120;
+    }
+
+    // Animate cute inspiration background birds (flapping wings & gentle flight paths)
     for (let i = 0; i < this.bgBirds.length; i++) {
       const bird = this.bgBirds[i];
-      bird.phase += delta * 9.0;
-      const wingBend = Math.sin(bird.phase) * 0.65;
-      bird.leftWing.rotation.z = wingBend;
-      bird.rightWing.rotation.z = Math.PI - wingBend;
-      bird.group.position.z -= bird.speed * delta;
-      bird.group.position.y += Math.sin(bird.phase * 0.4) * 0.012;
+      bird.phase += delta * 11.0;
+      const wingAngle = Math.sin(bird.phase) * 0.70;
+      if (bird.leftWing) bird.leftWing.rotation.z = wingAngle;
+      if (bird.rightWing) bird.rightWing.rotation.z = -wingAngle;
 
-      if (bird.group.position.z > playerZ + 15) {
-        bird.group.position.z = playerZ - 150 - Math.random() * 30;
+      bird.group.position.z -= bird.speed * delta;
+      bird.group.position.y = bird.initialY + Math.sin(bird.phase * 0.35) * 0.35;
+      bird.group.position.x = bird.initialX + Math.cos(bird.phase * 0.25) * 0.25;
+
+      if (bird.group.position.z > playerZ + 20) {
+        bird.group.position.z = playerZ - 160 - Math.random() * 40;
       }
+    }
+
+    // Distant V-Flock soaring across horizon
+    if (this.vFlock) {
+      this.vFlock.position.z = playerZ - 155;
+      this.vFlock.position.x = 12 + Math.sin(this.elapsedTime * 0.35) * 6.0;
+      this.vFlock.position.y = 19 + Math.cos(this.elapsedTime * 0.5) * 0.6;
     }
 
     // Swirling Leaf particles
