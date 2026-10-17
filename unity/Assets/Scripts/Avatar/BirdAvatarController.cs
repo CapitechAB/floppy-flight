@@ -13,7 +13,7 @@ namespace FloppyFlight.Avatar
         [Header("Beak Settings")]
         [SerializeField] private Transform centerEyeCamera;
         [SerializeField] private Transform beakMesh;
-        [SerializeField] private Vector3 beakOffset = new Vector3(0, -0.21f, 0.32f);
+        [SerializeField] private Vector3 beakOffset = new Vector3(0, -0.5f, 0.32f);
 
         private float leftFlapBend = 0f;
         private float rightFlapBend = 0f;

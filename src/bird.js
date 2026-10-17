@@ -55,7 +55,7 @@ export class BirdAvatar {
     beakGroup.add(rightNostril);
 
     // Positioned in lower view pointing forward/up toward the horizon, anchored firmly to bottom
-    beakGroup.position.set(0, -0.21, -0.30);
+    beakGroup.position.set(0, -0.5, -0.30);
     beakGroup.rotation.x = THREE.MathUtils.degToRad(-8);
     beakGroup.rotation.y = 0;
 
