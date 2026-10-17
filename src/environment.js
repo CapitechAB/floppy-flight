@@ -793,8 +793,8 @@ export class Environment {
     const geometries = createCloudGeometries();
     const material = createCloudMaterial();
 
-    // Same 32 flank clouds as the old sprites: far ones larger and slower.
-    const cloudCount = 32;
+    // Flank clouds reduced by 20% (from 32 to 26): far ones larger and slower.
+    const cloudCount = 26;
     for (let i = 0; i < cloudCount; i++) {
       const isFar = (i % 3 === 0);
       const baseScale = isFar ? (6.0 + Math.random() * 3.5) : (3.0 + Math.random() * 2.6);
