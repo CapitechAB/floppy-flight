@@ -45,8 +45,11 @@ namespace FloppyFlight.Editor
 
             for (var i = 0; i < defaults.Length; i++)
             {
+                // Unity 6 names: loopTime loops the clip, loopPose is the old loopBlend
+                // pose blend (still stored as loopBlend in the .meta). Leave pose blend off;
+                // the authored flap already cycles cleanly.
                 defaults[i].loopTime = true;
-                defaults[i].loopBlend = false;
+                defaults[i].loopPose = false;
                 if (defaults.Length == 1 || defaults[i].takeName == "Flap" || defaults[i].name == "Flap")
                     defaults[i].name = "Flap";
             }
