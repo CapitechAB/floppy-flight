@@ -169,6 +169,11 @@ async function record10sGameplay() {
     game.baseForwardSpeed = 16.0;
     game.pipesPerLevel = 10;
 
+    // Start at pipe 9 so Level 1 clears quickly, showcasing victory screen and Level 2 Jungle
+    game.score = 9;
+    game.levelPipesCleared = 9;
+    game.ui.updateScore(9);
+
     // Hook flap input to log wing flap whooshes
     const origFlap = game.handleFlapInput.bind(game);
     game.handleFlapInput = (side) => {
@@ -180,7 +185,7 @@ async function record10sGameplay() {
     };
 
     // Track score for chime sound
-    let prevScore = 0;
+    let prevScore = 9;
     let fanfareLogged = false;
     setInterval(() => {
       if (game.score > prevScore) {
@@ -198,12 +203,20 @@ async function record10sGameplay() {
           timeMs: performance.now() - window.__flightStart
         });
 
-        // Click NEXT LEVEL after 2.2 seconds of displaying victory screen
+        // Click NEXT LEVEL after 1.8 seconds of displaying victory screen
         setTimeout(() => {
           if (game.state === 'LEVEL_CLEARED') {
+            window.__audioEvents.push({
+              type: 'nextLevel',
+              timeMs: performance.now() - window.__flightStart
+            });
             game.nextLevel();
+            // Re-apply showcase speed & spacing for Level 2 Jungle
+            game.pipeManager.spacingZ = 14.0;
+            game.forwardSpeed = 16.0;
+            game.baseForwardSpeed = 16.0;
           }
-        }, 2200);
+        }, 1800);
       }
     }, 16);
 
@@ -281,6 +294,7 @@ async function record10sGameplay() {
   const masterR = new Float32Array(totalSamples);
 
   const bgmPcm = extractPcm(path.join(__dirname, 'src', 'assets', 'bgm.mp3'));
+  const bgmJunglePcm = extractPcm(path.join(__dirname, 'src', 'assets', 'bgm_jungle.mp3'));
   const flapPcms = [
     extractPcm(path.join(__dirname, 'src', 'assets', 'sfx', 'flap_1.mp3')),
     extractPcm(path.join(__dirname, 'src', 'assets', 'sfx', 'flap_2.mp3')),
@@ -359,6 +373,7 @@ async function record10sGameplay() {
   let flapIndex = 0;
   let fanfareStartSample = -1;
   let fanfareEndSample = -1;
+  let nextLevelSample = -1;
 
   for (const ev of audioEvents) {
     const startSample = Math.round((ev.timeMs / 1000) * sampleRate);
@@ -374,19 +389,32 @@ async function record10sGameplay() {
       mixBuffer(fanfarePcm, startSample, 0.95);
       fanfareStartSample = startSample;
       fanfareEndSample = startSample + Math.round(2.3 * sampleRate);
+    } else if (ev.type === 'nextLevel') {
+      nextLevelSample = startSample;
     }
   }
 
-  // Mix clean looping BGM with fanfare ducking
+  // Mix clean looping BGM with fanfare ducking and Level 2 Jungle transition
   const bgmSamples = bgmPcm.length / 4;
+  const bgmJungleSamples = bgmJunglePcm.length > 0 ? (bgmJunglePcm.length / 4) : bgmSamples;
+
   for (let i = 0; i < totalSamples; i++) {
-    const bgmIdx = i % bgmSamples;
     const isDucked = (i >= fanfareStartSample && i < fanfareEndSample);
     const bgmVol = isDucked ? 0.08 : 0.36;
-    const l = (bgmPcm.readInt16LE(bgmIdx * 4 + 0) / 32768.0) * bgmVol;
-    const r = (bgmPcm.readInt16LE(bgmIdx * 4 + 2) / 32768.0) * bgmVol;
-    masterL[i] += l;
-    masterR[i] += r;
+
+    if (nextLevelSample !== -1 && i >= nextLevelSample && bgmJunglePcm.length > 0) {
+      const jungleIdx = (i - nextLevelSample) % bgmJungleSamples;
+      const l = (bgmJunglePcm.readInt16LE(jungleIdx * 4 + 0) / 32768.0) * bgmVol;
+      const r = (bgmJunglePcm.readInt16LE(jungleIdx * 4 + 2) / 32768.0) * bgmVol;
+      masterL[i] += l;
+      masterR[i] += r;
+    } else {
+      const bgmIdx = i % bgmSamples;
+      const l = (bgmPcm.readInt16LE(bgmIdx * 4 + 0) / 32768.0) * bgmVol;
+      const r = (bgmPcm.readInt16LE(bgmIdx * 4 + 2) / 32768.0) * bgmVol;
+      masterL[i] += l;
+      masterR[i] += r;
+    }
   }
 
   const audioWavPath = path.join(__dirname, 'gameplay_audio.wav');

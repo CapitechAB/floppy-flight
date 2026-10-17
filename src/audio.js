@@ -1,4 +1,5 @@
 import bgmUrl from './assets/bgm.mp3';
+import bgmJungleUrl from './assets/bgm_jungle.mp3';
 import flap1Url from './assets/sfx/flap_1.mp3';
 import flap2Url from './assets/sfx/flap_2.mp3';
 import flap3Url from './assets/sfx/flap_3.mp3';
@@ -12,10 +13,18 @@ class SoundFX {
     this.isMuted = false;
     this.isGameOver = false;
 
-    // Background Music Player
-    this.bgm = new Audio(bgmUrl);
-    this.bgm.loop = true;
-    this.bgm.volume = 0.38;
+    // Background Music Players for Level 1 (Meadow) and Level 2 (Jungle)
+    this.bgmTracks = {
+      1: new Audio(bgmUrl),
+      2: new Audio(bgmJungleUrl)
+    };
+    for (const audio of Object.values(this.bgmTracks)) {
+      audio.loop = true;
+      audio.volume = 0.38;
+      audio.preload = 'auto';
+    }
+    this.currentLevel = 1;
+    this.bgm = this.bgmTracks[1];
     this.bgmStarted = false;
 
     // Preloaded Audio HTML5 elements for immediate instant response
@@ -89,6 +98,21 @@ class SoundFX {
   setBGMVolume(vol) {
     if (this.bgm) {
       this.bgm.volume = vol;
+    }
+  }
+
+  setLevel(level = 1) {
+    if (this.currentLevel === level) return;
+    const wasPlaying = this.bgm && !this.bgm.paused;
+    if (this.bgm) {
+      this.bgm.pause();
+      this.bgm.currentTime = 0;
+    }
+    this.currentLevel = level;
+    this.bgm = this.bgmTracks[level] || this.bgmTracks[1];
+    this.bgm.volume = this.isMuted ? 0 : 0.38;
+    if (wasPlaying || this.bgmStarted) {
+      this.bgm.play().catch(() => {});
     }
   }
 

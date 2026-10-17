@@ -261,11 +261,13 @@ export class UIManager {
     const mat = new THREE.MeshBasicMaterial({
       map: texture,
       transparent: true,
+      depthTest: false,
       side: THREE.DoubleSide
     });
 
     const geom = new THREE.PlaneGeometry(3.0, 1.78);
     this.gameOverMesh = new THREE.Mesh(geom, mat);
+    this.gameOverMesh.renderOrder = 999;
     this.gameOverMesh.visible = false;
     this.scene.add(this.gameOverMesh);
   }
@@ -334,11 +336,13 @@ export class UIManager {
     const mat = new THREE.MeshBasicMaterial({
       map: texture,
       transparent: true,
+      depthTest: false,
       side: THREE.DoubleSide
     });
 
     const geom = new THREE.PlaneGeometry(3.6, 2.25);
     this.levelClearedMesh = new THREE.Mesh(geom, mat);
+    this.levelClearedMesh.renderOrder = 999;
     this.levelClearedMesh.visible = false;
     this.scene.add(this.levelClearedMesh);
   }
@@ -410,8 +414,8 @@ export class UIManager {
     drawStar(w / 2 + 215, 57, 5, 22, 11, '#fffa65');
 
     // 3. Main Title: "LEVEL X CLEARED!"
-    const titleText = `LEVEL ${level} CLEARED!`;
-    c.font = 'bold 54px "Arial Black", Impact, sans-serif';
+    const titleText = (level === 2) ? 'LEVEL 2 CLEARED! 🌴' : `LEVEL ${level} CLEARED!`;
+    c.font = 'bold 50px "Arial Black", Impact, sans-serif';
     c.textAlign = 'center';
 
     // Drop shadow
@@ -443,7 +447,8 @@ export class UIManager {
 
     c.font = 'bold 26px "Arial Black", sans-serif';
     c.fillStyle = '#2f3542';
-    c.fillText('🎉 10 PIPES COMPLETED! 🎉', w / 2, 196);
+    const subText = (level === 2) ? '🌴 JUNGLE CONQUERED! 🌴' : '🎉 10 PIPES COMPLETED! 🎉';
+    c.fillText(subText, w / 2, 196);
 
     c.font = 'bold 22px Arial, sans-serif';
     c.fillStyle = '#0984e3';
@@ -479,7 +484,8 @@ export class UIManager {
     // Next Level text
     c.font = 'bold 28px "Arial Black", Impact, sans-serif';
     c.fillStyle = '#ffffff';
-    c.fillText('▶ NEXT LEVEL', w / 2, nextY + 43);
+    const btnText = (level === 1) ? '▶ JUNGLE LEVEL 2' : '▶ PLAY AGAIN';
+    c.fillText(btnText, w / 2, nextY + 43);
 
     // 6. QUIT GAME Button (Secondary, noticeably smaller to prevent accidental clicks)
     // Box: x = 294, y = 372, w = 180, h = 38
@@ -541,11 +547,13 @@ export class UIManager {
     const mat = new THREE.MeshBasicMaterial({
       map: texture,
       transparent: true,
+      depthTest: false,
       side: THREE.DoubleSide
     });
 
     const geom = new THREE.PlaneGeometry(3.0, 1.97);
     this.pauseMesh = new THREE.Mesh(geom, mat);
+    this.pauseMesh.renderOrder = 999;
     this.pauseMesh.visible = false;
     this.scene.add(this.pauseMesh);
   }

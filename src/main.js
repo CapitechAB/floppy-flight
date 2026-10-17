@@ -290,6 +290,11 @@ class FloppyFlightGame {
     this.baseForwardSpeed = 7.5;
     this.forwardSpeed = this.baseForwardSpeed;
     this.flapCooldown = 0;
+
+    // Revert to Meadow theme and Level 1 track cleanly
+    this.environment.setTheme('meadow');
+    this.pipeManager.setTheme('meadow');
+    sound.setLevel(1);
     sound.setBGMVolume(0.38);
     document.body.style.cursor = 'default';
 
@@ -410,6 +415,18 @@ class FloppyFlightGame {
     this.currentLevel++;
     this.levelPipesCleared = 0;
     document.body.style.cursor = 'default';
+
+    if (this.currentLevel === 2) {
+      this.environment.setTheme('jungle');
+      this.pipeManager.setTheme('jungle');
+      sound.setLevel(2);
+    } else {
+      // Loop back to Level 1 Meadow after completing Level 2
+      this.currentLevel = 1;
+      this.environment.setTheme('meadow');
+      this.pipeManager.setTheme('meadow');
+      sound.setLevel(1);
+    }
 
     // Reposition pipe pool and enemies forward from current player Z
     this.pipeManager.reset(this.playerRig.position.z - 18);

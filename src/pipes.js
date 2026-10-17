@@ -61,6 +61,57 @@ export class PipeManager {
     this.initPool();
   }
 
+  setTheme(theme = 'meadow') {
+    if (theme === 'jungle') {
+      // Exotic Jungle theme: ancient mossy jade stone pipes, creeping woody lianas, tropical broadleaves, and Aztec golden sun disks!
+      this.pipeMat.color.setHex(0x166534); // Deep mossy jungle jade
+      this.pipeMat.roughness = 0.42;
+      this.pipeMat.metalness = 0.04;
+
+      this.lipMat.color.setHex(0x14532d); // Dark rainforest rim
+      this.lipMat.roughness = 0.38;
+
+      this.lipTrimMat.color.setHex(0x052e16); // Deep shadowed interior
+
+      this.vineMat.color.setHex(0x713f12); // Tropical woody liana vine
+      this.vineMat.roughness = 0.7;
+
+      this.leafMat.color.setHex(0x10ac84); // Lush broadleaf tropical green
+      this.leafMat.roughness = 0.4;
+
+      this.ringMat.color.setHex(0xf39c12); // Ancient Aztec golden relic
+      this.ringMat.emissive.setHex(0xd35400);
+      this.ringMat.emissiveIntensity = 0.5;
+
+      this.starMat.color.setHex(0xf1c40f); // Bright golden sun jewel
+      this.starMat.emissive.setHex(0xf39c12);
+    } else {
+      // Meadow (Level 1) classic Nintendo/Floppy style
+      this.pipeMat.color.setHex(0x4cd137);
+      this.pipeMat.roughness = 0.28;
+      this.pipeMat.metalness = 0.08;
+
+      this.lipMat.color.setHex(0x44bd32);
+      this.lipMat.roughness = 0.25;
+
+      this.lipTrimMat.color.setHex(0x27ae60);
+      this.lipTrimMat.roughness = 0.3;
+
+      this.vineMat.color.setHex(0x1b8a36);
+      this.vineMat.roughness = 0.5;
+
+      this.leafMat.color.setHex(0x2ed573);
+      this.leafMat.roughness = 0.35;
+
+      this.ringMat.color.setHex(0xffa502);
+      this.ringMat.emissive.setHex(0xffa502);
+      this.ringMat.emissiveIntensity = 0.4;
+
+      this.starMat.color.setHex(0xfff200);
+      this.starMat.emissive.setHex(0xfff200);
+    }
+  }
+
   createVines(isTop, totalHeight) {
     const vineGroup = new THREE.Group();
 

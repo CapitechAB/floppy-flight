@@ -40,32 +40,46 @@ export class Environment {
 
   createSkyDome() {
     // Large hemisphere dome with vibrant vertical sunset gradient
-    const canvas = document.createElement('canvas');
-    canvas.width = 16;
-    canvas.height = 256;
-    const ctx = canvas.getContext('2d');
+    const makeSkyGradient = (isJungle = false) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 16;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d');
 
-    const grad = ctx.createLinearGradient(0, 0, 0, 256);
-    grad.addColorStop(0.0, '#1da2d8'); // Deep vibrant sky blue at top
-    grad.addColorStop(0.35, '#56ccf2'); // Bright aqua
-    grad.addColorStop(0.65, '#fbc531'); // Radiant warm gold
-    grad.addColorStop(0.88, '#fa8231'); // Sunset orange
-    grad.addColorStop(1.0, '#eb3b5a'); // Rose horizon base
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 16, 256);
+      const grad = ctx.createLinearGradient(0, 0, 0, 256);
+      if (isJungle) {
+        grad.addColorStop(0.0, '#032b21'); // Deep jungle sky
+        grad.addColorStop(0.30, '#0b6645'); // Lush jade canopy
+        grad.addColorStop(0.60, '#10ac84'); // Radiant tropical emerald
+        grad.addColorStop(0.85, '#f1c40f'); // Golden amber sunlight
+        grad.addColorStop(1.0, '#e17055'); // Exotic dusk horizon
+      } else {
+        grad.addColorStop(0.0, '#1da2d8'); // Deep vibrant sky blue at top
+        grad.addColorStop(0.35, '#56ccf2'); // Bright aqua
+        grad.addColorStop(0.65, '#fbc531'); // Radiant warm gold
+        grad.addColorStop(0.88, '#fa8231'); // Sunset orange
+        grad.addColorStop(1.0, '#eb3b5a'); // Rose horizon base
+      }
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 16, 256);
 
-    const skyTex = new THREE.CanvasTexture(canvas);
-    skyTex.magFilter = THREE.LinearFilter;
-    skyTex.minFilter = THREE.LinearFilter;
+      const skyTex = new THREE.CanvasTexture(canvas);
+      skyTex.magFilter = THREE.LinearFilter;
+      skyTex.minFilter = THREE.LinearFilter;
+      return skyTex;
+    };
+
+    this.skyTexMeadow = makeSkyGradient(false);
+    this.skyTexJungle = makeSkyGradient(true);
 
     const skyGeom = new THREE.SphereGeometry(220, 64, 32);
-    const skyMat = new THREE.MeshBasicMaterial({
-      map: skyTex,
+    this.skyMat = new THREE.MeshBasicMaterial({
+      map: this.skyTexMeadow,
       side: THREE.BackSide,
       fog: false
     });
 
-    this.skyDome = new THREE.Mesh(skyGeom, skyMat);
+    this.skyDome = new THREE.Mesh(skyGeom, this.skyMat);
     this.scene.add(this.skyDome);
 
     // Warm atmospheric fog that blends into the golden horizon
@@ -76,6 +90,7 @@ export class Environment {
     // Ambient warmth
     const hemiLight = new THREE.HemisphereLight(0xfffae6, 0x4cd137, 0.95);
     this.scene.add(hemiLight);
+    this.hemiLight = hemiLight;
 
     // Golden Sunlight with dynamic shadow tracking
     const sunLight = new THREE.DirectionalLight(0xfff1c5, 1.45);
@@ -138,81 +153,118 @@ export class Environment {
   createGround() {
     const groundGroup = new THREE.Group();
 
-    // 1. Expansive Meadow Ground (320m wide x 440m deep)
-    // Completely eliminates edge clipping and covers the horizon on all sides
-    const meadowCanvas = document.createElement('canvas');
-    meadowCanvas.width = 128;
-    meadowCanvas.height = 128;
-    const mctx = meadowCanvas.getContext('2d');
+    // 1. Expansive Ground Texture (Meadow vs Jungle)
+    const makeMeadowTexture = (isJungle = false) => {
+      const meadowCanvas = document.createElement('canvas');
+      meadowCanvas.width = 128;
+      meadowCanvas.height = 128;
+      const mctx = meadowCanvas.getContext('2d');
 
-    // Vibrant cartoon emerald green base
-    mctx.fillStyle = '#68d374';
-    mctx.fillRect(0, 0, 128, 128);
+      if (isJungle) {
+        // Deep mossy jungle floor with dark loam and tropical moss flecks
+        mctx.fillStyle = '#166534';
+        mctx.fillRect(0, 0, 128, 128);
+        mctx.fillStyle = '#14532d';
+        mctx.fillRect(0, 0, 64, 64);
+        mctx.fillRect(64, 64, 64, 64);
+        mctx.fillStyle = '#10ac84';
+        mctx.fillRect(16, 16, 8, 8);
+        mctx.fillRect(80, 80, 8, 8);
+        mctx.fillStyle = '#f39c12';
+        mctx.fillRect(32, 96, 6, 6);
+        mctx.fillRect(96, 32, 6, 6);
+      } else {
+        // Vibrant cartoon emerald green base
+        mctx.fillStyle = '#68d374';
+        mctx.fillRect(0, 0, 128, 128);
+        mctx.fillStyle = '#55c062';
+        mctx.fillRect(0, 0, 64, 64);
+        mctx.fillRect(64, 64, 64, 64);
+        mctx.fillStyle = '#7eed8b';
+        mctx.fillRect(16, 16, 8, 8);
+        mctx.fillRect(80, 80, 8, 8);
+        mctx.fillStyle = '#fad390';
+        mctx.fillRect(32, 96, 6, 6);
+        mctx.fillRect(96, 32, 6, 6);
+      }
 
-    // Subtle checkered shade variance
-    mctx.fillStyle = '#55c062';
-    mctx.fillRect(0, 0, 64, 64);
-    mctx.fillRect(64, 64, 64, 64);
+      const meadowTex = new THREE.CanvasTexture(meadowCanvas);
+      meadowTex.wrapS = THREE.RepeatWrapping;
+      meadowTex.wrapT = THREE.RepeatWrapping;
+      meadowTex.repeat.set(40, 55);
+      return meadowTex;
+    };
 
-    // Micro grass flecks for soft organic texture
-    mctx.fillStyle = '#7eed8b';
-    mctx.fillRect(16, 16, 8, 8);
-    mctx.fillRect(80, 80, 8, 8);
-    mctx.fillRect(32, 96, 6, 6);
-    mctx.fillRect(96, 32, 6, 6);
-
-    const meadowTex = new THREE.CanvasTexture(meadowCanvas);
-    meadowTex.wrapS = THREE.RepeatWrapping;
-    meadowTex.wrapT = THREE.RepeatWrapping;
-    meadowTex.repeat.set(40, 55);
-    this.meadowTexture = meadowTex;
+    this.meadowTexMeadow = makeMeadowTexture(false);
+    this.meadowTexJungle = makeMeadowTexture(true);
+    this.meadowTexture = this.meadowTexMeadow;
 
     const meadowGeom = new THREE.PlaneGeometry(320, 440);
     meadowGeom.rotateX(-Math.PI / 2);
 
-    const meadowMat = new THREE.MeshStandardMaterial({
-      map: meadowTex,
+    this.meadowMat = new THREE.MeshStandardMaterial({
+      map: this.meadowTexture,
       roughness: 0.82,
       metalness: 0.05
     });
 
-    this.meadowMesh = new THREE.Mesh(meadowGeom, meadowMat);
+    this.meadowMesh = new THREE.Mesh(meadowGeom, this.meadowMat);
     this.meadowMesh.position.set(0, 0, -120);
     this.meadowMesh.receiveShadow = true;
     groundGroup.add(this.meadowMesh);
 
     // 2. Central Flight Runway (22m wide x 440m deep)
-    // Stylized path with vibrant checkerboard and golden accent border
-    const runwayCanvas = document.createElement('canvas');
-    runwayCanvas.width = 128;
-    runwayCanvas.height = 128;
-    const rctx = runwayCanvas.getContext('2d');
+    const makeRunwayTexture = (isJungle = false) => {
+      const runwayCanvas = document.createElement('canvas');
+      runwayCanvas.width = 128;
+      runwayCanvas.height = 128;
+      const rctx = runwayCanvas.getContext('2d');
 
-    // Lime/emerald green base
-    rctx.fillStyle = '#78e08f';
-    rctx.fillRect(0, 0, 128, 128);
+      if (isJungle) {
+        // Ancient Aztec carved mossy stone runway
+        rctx.fillStyle = '#2f3542';
+        rctx.fillRect(0, 0, 128, 128);
+        rctx.fillStyle = '#1e272e';
+        rctx.fillRect(0, 0, 64, 64);
+        rctx.fillRect(64, 64, 64, 64);
+        rctx.fillStyle = '#10ac84';
+        rctx.fillRect(8, 8, 48, 4);
+        rctx.fillRect(8, 8, 4, 48);
+        rctx.fillRect(72, 72, 48, 4);
+        rctx.fillRect(72, 72, 4, 48);
+        rctx.fillStyle = '#f39c12';
+        rctx.fillRect(28, 28, 8, 8);
+        rctx.fillRect(92, 92, 8, 8);
+        rctx.strokeStyle = '#10ac84';
+        rctx.lineWidth = 6;
+        rctx.strokeRect(0, 0, 128, 128);
+      } else {
+        rctx.fillStyle = '#78e08f';
+        rctx.fillRect(0, 0, 128, 128);
+        rctx.fillStyle = '#38ada9';
+        rctx.fillRect(0, 0, 64, 64);
+        rctx.fillRect(64, 64, 64, 64);
+        rctx.strokeStyle = '#fad390';
+        rctx.lineWidth = 6;
+        rctx.strokeRect(0, 0, 128, 128);
+      }
 
-    // Checker pattern
-    rctx.fillStyle = '#38ada9';
-    rctx.fillRect(0, 0, 64, 64);
-    rctx.fillRect(64, 64, 64, 64);
+      const runwayTex = new THREE.CanvasTexture(runwayCanvas);
+      runwayTex.wrapS = THREE.RepeatWrapping;
+      runwayTex.wrapT = THREE.RepeatWrapping;
+      runwayTex.repeat.set(4, 110);
+      return runwayTex;
+    };
 
-    // Golden accent border
-    rctx.strokeStyle = '#fad390';
-    rctx.lineWidth = 6;
-    rctx.strokeRect(0, 0, 128, 128);
-
-    const runwayTex = new THREE.CanvasTexture(runwayCanvas);
-    runwayTex.wrapS = THREE.RepeatWrapping;
-    runwayTex.wrapT = THREE.RepeatWrapping;
-    runwayTex.repeat.set(4, 110);
-    this.runwayTexture = runwayTex;
+    this.runwayTexMeadow = makeRunwayTexture(false);
+    this.runwayTexJungle = makeRunwayTexture(true);
+    this.runwayTexture = this.runwayTexMeadow;
 
     const runwayGeom = new THREE.PlaneGeometry(22, 440);
     runwayGeom.rotateX(-Math.PI / 2);
 
-    const runwayMat = new THREE.MeshStandardMaterial({
-      map: runwayTex,
+    this.runwayMat = new THREE.MeshStandardMaterial({
+      map: this.runwayTexture,
       roughness: 0.72,
       metalness: 0.05,
       polygonOffset: true,
@@ -220,25 +272,25 @@ export class Environment {
       polygonOffsetUnits: -1
     });
 
-    this.runwayMesh = new THREE.Mesh(runwayGeom, runwayMat);
+    this.runwayMesh = new THREE.Mesh(runwayGeom, this.runwayMat);
     this.runwayMesh.position.set(0, 0.005, -120);
     this.runwayMesh.receiveShadow = true;
     groundGroup.add(this.runwayMesh);
 
-    // 3. Golden Curbs along runway edges for crisp 3D definition
-    const curbMat = new THREE.MeshStandardMaterial({
+    // 3. Golden / Jade Curbs along runway edges for crisp 3D definition
+    this.curbMat = new THREE.MeshStandardMaterial({
       color: 0xfad390,
       roughness: 0.4,
       metalness: 0.2
     });
     const curbGeom = new THREE.BoxGeometry(0.35, 0.06, 440);
 
-    const leftCurb = new THREE.Mesh(curbGeom, curbMat);
+    const leftCurb = new THREE.Mesh(curbGeom, this.curbMat);
     leftCurb.position.set(-11.0, 0.03, -120);
     leftCurb.receiveShadow = true;
     groundGroup.add(leftCurb);
 
-    const rightCurb = new THREE.Mesh(curbGeom, curbMat);
+    const rightCurb = new THREE.Mesh(curbGeom, this.curbMat);
     rightCurb.position.set(11.0, 0.03, -120);
     rightCurb.receiveShadow = true;
     groundGroup.add(rightCurb);
@@ -247,7 +299,7 @@ export class Environment {
     this.groundGroup = groundGroup;
   }
 
-  createTreelineTexture(isFar = false, variant = 0) {
+  createTreelineTexture(isFar = false, variant = 0, isJungle = false) {
     const canvas = document.createElement('canvas');
     canvas.width = 512;
     canvas.height = 128;
@@ -255,147 +307,295 @@ export class Environment {
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, 512, 128);
 
-    // Stepped pixel pine tree with wrapping
-    function drawSteppedPine(cx, baseY, w, h, darkColor, midColor, lightColor, highlightColor) {
-      const tiers = 3;
-      for (let t = 0; t < tiers; t++) {
-        const tierH = h * (0.38 - t * 0.05);
-        const tierW = w * (1.0 - t * 0.28);
-        const yTop = baseY - h + t * (h * 0.25);
+    if (isJungle) {
+      // Stepped pixel palm tree with arching fronds
+      function drawSteppedPalm(cx, baseY, w, h, trunkCol, darkLeaf, midLeaf, lightLeaf, highlightLeaf) {
+        ctx.fillStyle = trunkCol;
+        const trunkSteps = 9;
+        const curve = ((cx % 3) - 1) * (w * 0.2);
+        let topX = cx;
+        let topY = baseY - h * 0.72;
+        for (let s = 0; s < trunkSteps; s++) {
+          const t = s / trunkSteps;
+          const currX = Math.round(cx + Math.sin(t * Math.PI * 0.5) * curve);
+          const currY = Math.round(baseY - t * (h * 0.72));
+          const trunkW = Math.max(3, Math.round(5 - t * 2));
+          ctx.fillRect(currX - Math.floor(trunkW / 2), currY, trunkW, Math.round((h * 0.72) / trunkSteps) + 1);
+          if (s === trunkSteps - 1) {
+            topX = currX;
+            topY = currY;
+          }
+        }
+
+        // 7 Radiating arching fronds
+        const fronds = [
+          { angle: -2.35, len: w * 0.52 },
+          { angle: -1.95, len: w * 0.62 },
+          { angle: -1.57, len: w * 0.68 },
+          { angle: -1.18, len: w * 0.62 },
+          { angle: -0.78, len: w * 0.52 },
+          { angle: -2.85, len: w * 0.44 },
+          { angle: -0.28, len: w * 0.44 }
+        ];
+
+        for (const f of fronds) {
+          const segs = 6;
+          for (let s = 1; s <= segs; s++) {
+            const t = s / segs;
+            const fx = topX + Math.cos(f.angle) * f.len * t;
+            const fy = topY + Math.sin(f.angle) * f.len * t + t * t * 12;
+
+            ctx.fillStyle = darkLeaf;
+            ctx.fillRect(Math.round(fx - 2), Math.round(fy - 2), 5, 5);
+
+            ctx.fillStyle = midLeaf;
+            ctx.fillRect(Math.round(fx - 1), Math.round(fy - 1), 3, 3);
+
+            if (s < segs - 1) {
+              ctx.fillStyle = lightLeaf;
+              ctx.fillRect(Math.round(fx), Math.round(fy), 2, 2);
+            }
+            if (s === 2 || s === 3) {
+              ctx.fillStyle = highlightLeaf;
+              ctx.fillRect(Math.round(fx), Math.round(fy - 1), 2, 2);
+            }
+          }
+        }
+      }
+
+      // Stepped pixel broad rainforest umbrella canopy tree (Kapok)
+      function drawSteppedUmbrella(cx, baseY, w, h, trunkCol, darkLeaf, midLeaf, lightLeaf, highlightLeaf) {
+        ctx.fillStyle = trunkCol;
+        const trunkW = 5;
+        ctx.fillRect(Math.round(cx - trunkW / 2), Math.round(baseY - h * 0.75), trunkW, Math.round(h * 0.75));
+
+        const tiers = [
+          { yRel: 0.78, rx: w * 0.52, ry: h * 0.22 },
+          { yRel: 0.56, rx: w * 0.40, ry: h * 0.18 },
+          { yRel: 0.92, rx: w * 0.32, ry: h * 0.15 }
+        ];
+
+        for (const tier of tiers) {
+          const cy = baseY - h * tier.yRel;
+          const rx = tier.rx;
+          const ry = tier.ry;
+
+          ctx.fillStyle = darkLeaf;
+          for (let dy = -ry; dy <= ry; dy += 3) {
+            const factor = Math.sqrt(Math.max(0, 1 - (dy * dy) / (ry * ry)));
+            const halfW = rx * factor;
+            ctx.fillRect(Math.round(cx - halfW), Math.round(cy + dy), Math.round(halfW * 2), 4);
+          }
+
+          ctx.fillStyle = midLeaf;
+          for (let dy = -ry * 0.75; dy <= ry * 0.75; dy += 3) {
+            const factor = Math.sqrt(Math.max(0, 1 - (dy * dy) / (ry * ry * 0.56)));
+            const halfW = rx * 0.78 * factor;
+            ctx.fillRect(Math.round(cx - halfW + 1), Math.round(cy + dy - 1), Math.round(halfW * 2), 4);
+          }
+
+          ctx.fillStyle = lightLeaf;
+          for (let dy = -ry * 0.5; dy <= ry * 0.5; dy += 3) {
+            const factor = Math.sqrt(Math.max(0, 1 - (dy * dy) / (ry * ry * 0.25)));
+            const halfW = rx * 0.5 * factor;
+            ctx.fillRect(Math.round(cx - halfW + 2), Math.round(cy + dy - 2), Math.round(halfW * 2), 4);
+          }
+
+          ctx.fillStyle = highlightLeaf;
+          ctx.fillRect(Math.round(cx - rx * 0.25), Math.round(cy - ry * 0.7), Math.round(rx * 0.5), 3);
+        }
+      }
+
+      const wrapPalm = (cx, baseY, w, h, t, d, m, l, hl) => {
+        drawSteppedPalm(cx, baseY, w, h, t, d, m, l, hl);
+        if (cx - w < 0) drawSteppedPalm(cx + 512, baseY, w, h, t, d, m, l, hl);
+        if (cx + w > 512) drawSteppedPalm(cx - 512, baseY, w, h, t, d, m, l, hl);
+      };
+
+      const wrapUmbrella = (cx, baseY, w, h, t, d, m, l, hl) => {
+        drawSteppedUmbrella(cx, baseY, w, h, t, d, m, l, hl);
+        if (cx - w < 0) drawSteppedUmbrella(cx + 512, baseY, w, h, t, d, m, l, hl);
+        if (cx + w > 512) drawSteppedUmbrella(cx - 512, baseY, w, h, t, d, m, l, hl);
+      };
+
+      if (isFar) {
+        for (let x = 0; x < 512; x += 38) {
+          if ((x % 76) === 0) {
+            wrapUmbrella(x, 128, 46, 62, '#1e272e', '#032b21', '#0b6645', '#10ac84', '#f1c40f');
+          } else {
+            wrapPalm(x, 128, 42, 68, '#3d271d', '#032b21', '#0b6645', '#10ac84', '#a8e6cf');
+          }
+        }
+        for (let x = 18; x < 512; x += 44) {
+          if ((x % 88) === 0) {
+            wrapPalm(x, 128, 48, 76, '#3d271d', '#021e17', '#084b33', '#0e8869', '#55efc4');
+          } else {
+            wrapUmbrella(x, 128, 52, 72, '#1e272e', '#021e17', '#084b33', '#0e8869', '#55efc4');
+          }
+        }
+        ctx.fillStyle = '#021e17';
+        ctx.fillRect(0, 105, 512, 23);
+      } else {
+        const offset = variant * 28;
+        for (let x = offset % 42; x < 512 + (offset % 42); x += 42) {
+          wrapUmbrella(x % 512, 128, 48, 64, '#3d271d', '#032b21', '#0b6645', '#10ac84', '#2ed573');
+        }
+        for (let x = (16 + offset) % 48; x < 512 + ((16 + offset) % 48); x += 48) {
+          if (((x + variant * 12) % 96) < 48) {
+            wrapPalm(x % 512, 128, 52, 84, '#543825', '#02241b', '#0a523a', '#10ac84', '#f1c40f');
+          } else {
+            wrapUmbrella(x % 512, 128, 56, 76, '#2d1d14', '#02241b', '#0a523a', '#10ac84', '#f1c40f');
+          }
+        }
+        for (let x = (26 + offset) % 56; x < 512 + ((26 + offset) % 56); x += 56) {
+          wrapPalm(x % 512, 128, 54, 92, '#543825', '#011913', '#063f2d', '#0b8a65', '#ffd32a');
+        }
+        ctx.fillStyle = '#011913';
+        ctx.fillRect(0, 105, 512, 23);
+      }
+    } else {
+      // Stepped pixel pine tree with wrapping
+      function drawSteppedPine(cx, baseY, w, h, darkColor, midColor, lightColor, highlightColor) {
+        const tiers = 3;
+        for (let t = 0; t < tiers; t++) {
+          const tierH = h * (0.38 - t * 0.05);
+          const tierW = w * (1.0 - t * 0.28);
+          const yTop = baseY - h + t * (h * 0.25);
+
+          ctx.fillStyle = darkColor;
+          const steps = 6;
+          for (let s = 0; s <= steps; s++) {
+            const frac = s / steps;
+            const currY = yTop + frac * tierH;
+            const halfW = (frac * tierW) / 2;
+            ctx.fillRect(Math.round(cx - halfW), Math.round(currY), Math.round(halfW * 2), Math.round(tierH / steps) + 1);
+          }
+
+          ctx.fillStyle = midColor;
+          for (let s = 1; s < steps; s++) {
+            const frac = s / steps;
+            const currY = yTop + frac * tierH;
+            const halfW = (frac * tierW * 0.75) / 2;
+            ctx.fillRect(Math.round(cx - halfW), Math.round(currY), Math.round(halfW * 2), Math.round(tierH / steps));
+          }
+
+          ctx.fillStyle = lightColor;
+          for (let s = 1; s < steps - 1; s++) {
+            const frac = s / steps;
+            const currY = yTop + frac * tierH;
+            const halfW = (frac * tierW * 0.45) / 2;
+            ctx.fillRect(Math.round(cx - halfW + 2), Math.round(currY), Math.round(halfW * 2), Math.round(tierH / steps));
+          }
+
+          ctx.fillStyle = highlightColor;
+          ctx.fillRect(Math.round(cx - 3), Math.round(yTop), 7, 3);
+          ctx.fillRect(Math.round(cx + 1), Math.round(yTop + 3), 4, 3);
+        }
+      }
+
+      // Stepped pixel round oak tree with wrapping
+      function drawSteppedOak(cx, baseY, radius, darkColor, midColor, lightColor, highlightColor) {
+        const subSpheres = [
+          { ox: 0, oy: -radius * 0.8, r: radius * 0.9 },
+          { ox: -radius * 0.5, oy: -radius * 0.5, r: radius * 0.7 },
+          { ox: radius * 0.5, oy: -radius * 0.5, r: radius * 0.7 },
+          { ox: 0, oy: -radius * 1.1, r: radius * 0.6 }
+        ];
 
         ctx.fillStyle = darkColor;
-        const steps = 6;
-        for (let s = 0; s <= steps; s++) {
-          const frac = s / steps;
-          const currY = yTop + frac * tierH;
-          const halfW = (frac * tierW) / 2;
-          ctx.fillRect(Math.round(cx - halfW), Math.round(currY), Math.round(halfW * 2), Math.round(tierH / steps) + 1);
+        for (const s of subSpheres) {
+          const x0 = cx + s.ox;
+          const y0 = baseY + s.oy;
+          const r = s.r;
+          for (let dy = -r; dy <= r; dy += 4) {
+            const halfW = Math.sqrt(Math.max(0, r * r - dy * dy));
+            ctx.fillRect(Math.round(x0 - halfW), Math.round(y0 + dy), Math.round(halfW * 2), 5);
+          }
         }
 
         ctx.fillStyle = midColor;
-        for (let s = 1; s < steps; s++) {
-          const frac = s / steps;
-          const currY = yTop + frac * tierH;
-          const halfW = (frac * tierW * 0.75) / 2;
-          ctx.fillRect(Math.round(cx - halfW), Math.round(currY), Math.round(halfW * 2), Math.round(tierH / steps));
+        for (const s of subSpheres) {
+          const x0 = cx + s.ox + 1;
+          const y0 = baseY + s.oy - 1;
+          const r = s.r * 0.78;
+          for (let dy = -r; dy <= r; dy += 4) {
+            const halfW = Math.sqrt(Math.max(0, r * r - dy * dy));
+            ctx.fillRect(Math.round(x0 - halfW), Math.round(y0 + dy), Math.round(halfW * 2), 5);
+          }
         }
 
         ctx.fillStyle = lightColor;
-        for (let s = 1; s < steps - 1; s++) {
-          const frac = s / steps;
-          const currY = yTop + frac * tierH;
-          const halfW = (frac * tierW * 0.45) / 2;
-          ctx.fillRect(Math.round(cx - halfW + 2), Math.round(currY), Math.round(halfW * 2), Math.round(tierH / steps));
+        for (const s of subSpheres) {
+          const x0 = cx + s.ox + 3;
+          const y0 = baseY + s.oy - 4;
+          const r = s.r * 0.5;
+          for (let dy = -r; dy <= r; dy += 4) {
+            const halfW = Math.sqrt(Math.max(0, r * r - dy * dy));
+            ctx.fillRect(Math.round(x0 - halfW), Math.round(y0 + dy), Math.round(halfW * 2), 5);
+          }
         }
 
         ctx.fillStyle = highlightColor;
-        ctx.fillRect(Math.round(cx - 3), Math.round(yTop), 7, 3);
-        ctx.fillRect(Math.round(cx + 1), Math.round(yTop + 3), 4, 3);
-      }
-    }
-
-    // Stepped pixel round oak tree with wrapping
-    function drawSteppedOak(cx, baseY, radius, darkColor, midColor, lightColor, highlightColor) {
-      const subSpheres = [
-        { ox: 0, oy: -radius * 0.8, r: radius * 0.9 },
-        { ox: -radius * 0.5, oy: -radius * 0.5, r: radius * 0.7 },
-        { ox: radius * 0.5, oy: -radius * 0.5, r: radius * 0.7 },
-        { ox: 0, oy: -radius * 1.1, r: radius * 0.6 }
-      ];
-
-      ctx.fillStyle = darkColor;
-      for (const s of subSpheres) {
-        const x0 = cx + s.ox;
-        const y0 = baseY + s.oy;
-        const r = s.r;
-        for (let dy = -r; dy <= r; dy += 4) {
-          const halfW = Math.sqrt(Math.max(0, r * r - dy * dy));
-          ctx.fillRect(Math.round(x0 - halfW), Math.round(y0 + dy), Math.round(halfW * 2), 5);
+        for (const s of subSpheres) {
+          ctx.fillRect(Math.round(cx + s.ox - 2), Math.round(baseY + s.oy - s.r), 6, 3);
+          ctx.fillRect(Math.round(cx + s.ox + 2), Math.round(baseY + s.oy - s.r + 3), 4, 3);
         }
       }
 
-      ctx.fillStyle = midColor;
-      for (const s of subSpheres) {
-        const x0 = cx + s.ox + 1;
-        const y0 = baseY + s.oy - 1;
-        const r = s.r * 0.78;
-        for (let dy = -r; dy <= r; dy += 4) {
-          const halfW = Math.sqrt(Math.max(0, r * r - dy * dy));
-          ctx.fillRect(Math.round(x0 - halfW), Math.round(y0 + dy), Math.round(halfW * 2), 5);
-        }
-      }
+      // Wrap drawing across boundaries so texture tiles seamlessly
+      const wrapPine = (cx, baseY, w, h, d, m, l, hl) => {
+        drawSteppedPine(cx, baseY, w, h, d, m, l, hl);
+        if (cx - w / 2 < 0) drawSteppedPine(cx + 512, baseY, w, h, d, m, l, hl);
+        if (cx + w / 2 > 512) drawSteppedPine(cx - 512, baseY, w, h, d, m, l, hl);
+      };
 
-      ctx.fillStyle = lightColor;
-      for (const s of subSpheres) {
-        const x0 = cx + s.ox + 3;
-        const y0 = baseY + s.oy - 4;
-        const r = s.r * 0.5;
-        for (let dy = -r; dy <= r; dy += 4) {
-          const halfW = Math.sqrt(Math.max(0, r * r - dy * dy));
-          ctx.fillRect(Math.round(x0 - halfW), Math.round(y0 + dy), Math.round(halfW * 2), 5);
-        }
-      }
+      const wrapOak = (cx, baseY, r, d, m, l, hl) => {
+        drawSteppedOak(cx, baseY, r, d, m, l, hl);
+        if (cx - r < 0) drawSteppedOak(cx + 512, baseY, r, d, m, l, hl);
+        if (cx + r > 512) drawSteppedOak(cx - 512, baseY, r, d, m, l, hl);
+      };
 
-      ctx.fillStyle = highlightColor;
-      for (const s of subSpheres) {
-        ctx.fillRect(Math.round(cx + s.ox - 2), Math.round(baseY + s.oy - s.r), 6, 3);
-        ctx.fillRect(Math.round(cx + s.ox + 2), Math.round(baseY + s.oy - s.r + 3), 4, 3);
-      }
-    }
-
-    // Wrap drawing across boundaries so texture tiles seamlessly
-    const wrapPine = (cx, baseY, w, h, d, m, l, hl) => {
-      drawSteppedPine(cx, baseY, w, h, d, m, l, hl);
-      if (cx - w / 2 < 0) drawSteppedPine(cx + 512, baseY, w, h, d, m, l, hl);
-      if (cx + w / 2 > 512) drawSteppedPine(cx - 512, baseY, w, h, d, m, l, hl);
-    };
-
-    const wrapOak = (cx, baseY, r, d, m, l, hl) => {
-      drawSteppedOak(cx, baseY, r, d, m, l, hl);
-      if (cx - r < 0) drawSteppedOak(cx + 512, baseY, r, d, m, l, hl);
-      if (cx + r > 512) drawSteppedOak(cx - 512, baseY, r, d, m, l, hl);
-    };
-
-    if (isFar) {
-      // Distant ridge
-      for (let x = 0; x < 512; x += 36) {
-        if ((x % 72) === 0) {
-          wrapPine(x, 128, 40, 58, '#244c35', '#2f6043', '#3f7c57', '#7dc495');
-        } else {
-          wrapOak(x, 128, 28, '#244c35', '#2f6043', '#3f7c57', '#7dc495');
+      if (isFar) {
+        // Distant ridge
+        for (let x = 0; x < 512; x += 36) {
+          if ((x % 72) === 0) {
+            wrapPine(x, 128, 40, 58, '#244c35', '#2f6043', '#3f7c57', '#7dc495');
+          } else {
+            wrapOak(x, 128, 28, '#244c35', '#2f6043', '#3f7c57', '#7dc495');
+          }
         }
-      }
-      for (let x = 18; x < 512; x += 44) {
-        if ((x % 88) === 0) {
-          wrapPine(x, 128, 46, 72, '#1a3f2d', '#23523c', '#2c6d4f', '#96dbae');
-        } else {
-          wrapOak(x, 128, 32, '#1a3f2d', '#23523c', '#2c6d4f', '#96dbae');
+        for (let x = 18; x < 512; x += 44) {
+          if ((x % 88) === 0) {
+            wrapPine(x, 128, 46, 72, '#1a3f2d', '#23523c', '#2c6d4f', '#96dbae');
+          } else {
+            wrapOak(x, 128, 32, '#1a3f2d', '#23523c', '#2c6d4f', '#96dbae');
+          }
         }
-      }
-      ctx.fillStyle = '#122e20';
-      ctx.fillRect(0, 105, 512, 23);
-    } else {
-      // Foreground lush ridge with golden sunrise highlights
-      const offset = variant * 28;
-      for (let x = offset % 40; x < 512 + (offset % 40); x += 40) {
-        wrapOak(x % 512, 128, 26, '#264e36', '#316645', '#45855c', '#89d4a3');
-      }
-      for (let x = (14 + offset) % 48; x < 512 + ((14 + offset) % 48); x += 48) {
-        if (((x + variant * 12) % 96) < 48) {
-          wrapPine(x % 512, 128, 48, 76, '#1b4332', '#245942', '#2d7a56', '#a3e6be');
-        } else {
-          wrapOak(x % 512, 128, 32, '#1b4332', '#245942', '#2d7a56', '#a3e6be');
+        ctx.fillStyle = '#122e20';
+        ctx.fillRect(0, 105, 512, 23);
+      } else {
+        // Foreground lush ridge with golden sunrise highlights
+        const offset = variant * 28;
+        for (let x = offset % 40; x < 512 + (offset % 40); x += 40) {
+          wrapOak(x % 512, 128, 26, '#264e36', '#316645', '#45855c', '#89d4a3');
         }
-      }
-      for (let x = (26 + offset) % 56; x < 512 + ((26 + offset) % 56); x += 56) {
-        if (((x + variant * 20) % 112) < 56) {
-          wrapPine(x % 512, 128, 52, 90, '#133624', '#1c4a32', '#246342', '#ffd32a');
-        } else {
-          wrapOak(x % 512, 128, 38, '#133624', '#1c4a32', '#246342', '#ffd32a');
+        for (let x = (14 + offset) % 48; x < 512 + ((14 + offset) % 48); x += 48) {
+          if (((x + variant * 12) % 96) < 48) {
+            wrapPine(x % 512, 128, 48, 76, '#1b4332', '#245942', '#2d7a56', '#a3e6be');
+          } else {
+            wrapOak(x % 512, 128, 32, '#1b4332', '#245942', '#2d7a56', '#a3e6be');
+          }
         }
+        for (let x = (26 + offset) % 56; x < 512 + ((26 + offset) % 56); x += 56) {
+          if (((x + variant * 20) % 112) < 56) {
+            wrapPine(x % 512, 128, 52, 90, '#133624', '#1c4a32', '#246342', '#ffd32a');
+          } else {
+            wrapOak(x % 512, 128, 38, '#133624', '#1c4a32', '#246342', '#ffd32a');
+          }
+        }
+        ctx.fillStyle = '#133624';
+        ctx.fillRect(0, 105, 512, 23);
       }
-      ctx.fillStyle = '#133624';
-      ctx.fillRect(0, 105, 512, 23);
     }
 
     const tex = new THREE.CanvasTexture(canvas);
@@ -409,30 +609,37 @@ export class Environment {
 
   createSideForest() {
     // 1. Layered Pixel-Art Treeline Billboard Segments (anchored in world coordinates!)
-    const nearTexA = this.createTreelineTexture(false, 0);
-    const nearTexB = this.createTreelineTexture(false, 1);
-    const farTex = this.createTreelineTexture(true, 0);
+    this.nearTexA_Meadow = this.createTreelineTexture(false, 0, false);
+    this.nearTexB_Meadow = this.createTreelineTexture(false, 1, false);
+    this.farTex_Meadow = this.createTreelineTexture(true, 0, false);
+
+    this.nearTexA_Jungle = this.createTreelineTexture(false, 0, true);
+    this.nearTexB_Jungle = this.createTreelineTexture(false, 1, true);
+    this.farTex_Jungle = this.createTreelineTexture(true, 0, true);
 
     const nearMatA = new THREE.MeshBasicMaterial({
-      map: nearTexA,
+      map: this.nearTexA_Meadow,
       transparent: true,
       alphaTest: 0.15,
       side: THREE.DoubleSide
     });
+    this.nearMatA = nearMatA;
 
     const nearMatB = new THREE.MeshBasicMaterial({
-      map: nearTexB,
+      map: this.nearTexB_Meadow,
       transparent: true,
       alphaTest: 0.15,
       side: THREE.DoubleSide
     });
+    this.nearMatB = nearMatB;
 
     const farMat = new THREE.MeshBasicMaterial({
-      map: farTex,
+      map: this.farTex_Meadow,
       transparent: true,
       alphaTest: 0.15,
       side: THREE.DoubleSide
     });
+    this.farMat = farMat;
 
     this.innerTreelineSegments = [];
     this.outerTreelineSegments = [];
@@ -490,12 +697,19 @@ export class Environment {
 
     // 2. Procedural 3D Cartoon Trees (Foreground & Midground with real stereo volume & shadows)
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x784e2d, roughness: 0.8 });
+    this.trunkMat = trunkMat;
     const pineColors = [0x1e824c, 0x27ae60, 0x2ecc71];
+    this.pineMats = [
+      new THREE.MeshStandardMaterial({ color: pineColors[0], roughness: 0.4 }),
+      new THREE.MeshStandardMaterial({ color: pineColors[1], roughness: 0.4 }),
+      new THREE.MeshStandardMaterial({ color: pineColors[2], roughness: 0.4 })
+    ];
     const oakMats = [
       new THREE.MeshStandardMaterial({ color: 0x4cd137, roughness: 0.35 }),
       new THREE.MeshStandardMaterial({ color: 0x44bd32, roughness: 0.35 }),
       new THREE.MeshStandardMaterial({ color: 0x7bed9f, roughness: 0.35 })
     ];
+    this.oakMats = oakMats;
 
     const spawnTree = (type, x, z, scale = 1.0) => {
       const tree = new THREE.Group();
@@ -510,8 +724,7 @@ export class Environment {
         // 3 stepped conical pine tiers
         for (let c = 0; c < 3; c++) {
           const coneGeom = new THREE.ConeGeometry((1.5 - c * 0.3) * scale, (1.6 - c * 0.22) * scale, 7);
-          const coneMat = new THREE.MeshStandardMaterial({ color: pineColors[c], roughness: 0.4 });
-          const cone = new THREE.Mesh(coneGeom, coneMat);
+          const cone = new THREE.Mesh(coneGeom, this.pineMats[c]);
           cone.position.y = (1.5 + c * 0.95) * scale;
           cone.castShadow = true;
           cone.receiveShadow = true;
@@ -585,16 +798,19 @@ export class Environment {
       roughness: 0.9,
       metalness: 0.05
     });
+    this.earthMat = earthMat;
 
     const grassPlateauMat = new THREE.MeshStandardMaterial({
       color: 0x68d374,
       roughness: 0.65
     });
+    this.grassPlateauMat = grassPlateauMat;
 
     const curbMat = new THREE.MeshStandardMaterial({
       map: curbTex,
       roughness: 0.4
     });
+    this.terraceCurbMat = curbMat;
 
     const spawnTerrace = (x, z, width = 7.0, height = 1.9, length = 18.0) => {
       const group = new THREE.Group();
@@ -718,7 +934,9 @@ export class Environment {
 
   createFloatingIslands() {
     const islandMatGrass = new THREE.MeshStandardMaterial({ color: 0x78e08f, roughness: 0.6 });
+    this.islandMatGrass = islandMatGrass;
     const islandMatRock = new THREE.MeshStandardMaterial({ color: 0xb71540, roughness: 0.9 });
+    this.islandMatRock = islandMatRock;
     const woodMat = new THREE.MeshStandardMaterial({ color: 0xe58e26, roughness: 0.7 });
     const sailMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, side: THREE.DoubleSide });
 
@@ -1271,6 +1489,165 @@ export class Environment {
         }
       }
       this.sparkleParticles.geometry.attributes.position.needsUpdate = true;
+    }
+  }
+
+  setTheme(theme = 'meadow') {
+    if (theme === 'jungle') {
+      // 1. Sky & Fog
+      if (this.skyMat) {
+        this.skyMat.map = this.skyTexJungle;
+        this.skyMat.needsUpdate = true;
+      }
+      if (this.scene.fog) {
+        this.scene.fog.color.setHex(0x10ac84); // Lush tropical emerald mist
+        this.scene.fog.density = 0.0075;
+      }
+
+      // 2. Lighting & Sun
+      if (this.hemiLight) {
+        this.hemiLight.color.setHex(0x55efc4); // Turquoise tropical sky ambient
+        this.hemiLight.groundColor.setHex(0x00b894); // Lush emerald ground ambient
+      }
+      if (this.sunLight) {
+        this.sunLight.color.setHex(0xffeaa7); // Warm tropical sun
+      }
+      if (this.sunMesh && this.sunMesh.material) {
+        this.sunMesh.material.color.setHex(0xfdcb6e);
+      }
+      if (this.sunRays) {
+        this.sunRays.traverse(child => {
+          if (child.isMesh && child.material) child.material.color.setHex(0x55efc4);
+        });
+      }
+
+      // 3. Ground & Central Runway
+      this.meadowTexture = this.meadowTexJungle;
+      this.runwayTexture = this.runwayTexJungle;
+      if (this.meadowMesh && this.meadowMesh.material) {
+        this.meadowMesh.material.map = this.meadowTexJungle;
+        this.meadowMesh.material.needsUpdate = true;
+      }
+      if (this.runwayMesh && this.runwayMesh.material) {
+        this.runwayMesh.material.map = this.runwayTexJungle;
+        this.runwayMesh.material.needsUpdate = true;
+      }
+      if (this.curbMat) {
+        this.curbMat.color.setHex(0x10ac84); // Ancient carved jade border
+      }
+
+      // 4. Treeline Billboards (Tropical palms & Kapok umbrella canopy trees)
+      if (this.nearMatA) {
+        this.nearMatA.map = this.nearTexA_Jungle;
+        this.nearMatA.needsUpdate = true;
+      }
+      if (this.nearMatB) {
+        this.nearMatB.map = this.nearTexB_Jungle;
+        this.nearMatB.needsUpdate = true;
+      }
+      if (this.farMat) {
+        this.farMat.map = this.farTex_Jungle;
+        this.farMat.needsUpdate = true;
+      }
+
+      // 5. 3D Side Trees
+      if (this.trunkMat) this.trunkMat.color.setHex(0x3d2314); // Dark tropical mahogany bark
+      if (this.pineMats) {
+        this.pineMats[0].color.setHex(0x064e3b);
+        this.pineMats[1].color.setHex(0x047857);
+        this.pineMats[2].color.setHex(0x10b981);
+      }
+      if (this.oakMats) {
+        this.oakMats[0].color.setHex(0x065f46);
+        this.oakMats[1].color.setHex(0x059669);
+        this.oakMats[2].color.setHex(0x34d399);
+      }
+
+      // 6. Terraces & Floating Islands
+      if (this.earthMat) this.earthMat.color.setHex(0x2d3436); // Weathered Aztec volcanic basalt
+      if (this.grassPlateauMat) this.grassPlateauMat.color.setHex(0x15803d); // Deep rainforest moss
+      if (this.terraceCurbMat) this.terraceCurbMat.color.setHex(0x10ac84);
+
+      if (this.islandMatGrass) this.islandMatGrass.color.setHex(0x15803d);
+      if (this.islandMatRock) this.islandMatRock.color.setHex(0x2d3436);
+    } else {
+      // Meadow (Level 1)
+      // 1. Sky & Fog
+      if (this.skyMat) {
+        this.skyMat.map = this.skyTexMeadow;
+        this.skyMat.needsUpdate = true;
+      }
+      if (this.scene.fog) {
+        this.scene.fog.color.setHex(0xfbc531); // Radiant sunset gold fog
+        this.scene.fog.density = 0.0075;
+      }
+
+      // 2. Lighting & Sun
+      if (this.hemiLight) {
+        this.hemiLight.color.setHex(0xfffae6);
+        this.hemiLight.groundColor.setHex(0x4cd137);
+      }
+      if (this.sunLight) {
+        this.sunLight.color.setHex(0xfff1c5);
+      }
+      if (this.sunMesh && this.sunMesh.material) {
+        this.sunMesh.material.color.setHex(0xfff4b8);
+      }
+      if (this.sunRays) {
+        this.sunRays.traverse(child => {
+          if (child.isMesh && child.material) child.material.color.setHex(0xfffae0);
+        });
+      }
+
+      // 3. Ground & Central Runway
+      this.meadowTexture = this.meadowTexMeadow;
+      this.runwayTexture = this.runwayTexMeadow;
+      if (this.meadowMesh && this.meadowMesh.material) {
+        this.meadowMesh.material.map = this.meadowTexMeadow;
+        this.meadowMesh.material.needsUpdate = true;
+      }
+      if (this.runwayMesh && this.runwayMesh.material) {
+        this.runwayMesh.material.map = this.runwayTexMeadow;
+        this.runwayMesh.material.needsUpdate = true;
+      }
+      if (this.curbMat) {
+        this.curbMat.color.setHex(0xfad390); // Golden curb
+      }
+
+      // 4. Treeline Billboards
+      if (this.nearMatA) {
+        this.nearMatA.map = this.nearTexA_Meadow;
+        this.nearMatA.needsUpdate = true;
+      }
+      if (this.nearMatB) {
+        this.nearMatB.map = this.nearTexB_Meadow;
+        this.nearMatB.needsUpdate = true;
+      }
+      if (this.farMat) {
+        this.farMat.map = this.farTex_Meadow;
+        this.farMat.needsUpdate = true;
+      }
+
+      // 5. 3D Side Trees
+      if (this.trunkMat) this.trunkMat.color.setHex(0x784e2d);
+      if (this.pineMats) {
+        this.pineMats[0].color.setHex(0x1e824c);
+        this.pineMats[1].color.setHex(0x27ae60);
+        this.pineMats[2].color.setHex(0x2ecc71);
+      }
+      if (this.oakMats) {
+        this.oakMats[0].color.setHex(0x4cd137);
+        this.oakMats[1].color.setHex(0x44bd32);
+        this.oakMats[2].color.setHex(0x7bed9f);
+      }
+
+      // 6. Terraces & Floating Islands
+      if (this.earthMat) this.earthMat.color.setHex(0x8c532b);
+      if (this.grassPlateauMat) this.grassPlateauMat.color.setHex(0x68d374);
+      if (this.terraceCurbMat) this.terraceCurbMat.color.setHex(0xffffff);
+
+      if (this.islandMatGrass) this.islandMatGrass.color.setHex(0x78e08f);
+      if (this.islandMatRock) this.islandMatRock.color.setHex(0xb71540);
     }
   }
 }
