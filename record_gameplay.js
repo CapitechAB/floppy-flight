@@ -11,8 +11,8 @@ const __dirname = path.dirname(__filename);
 const PORT = 8089;
 const DIST_DIR = path.join(__dirname, 'dist');
 const FFMPEG_PATH = 'C:\\Users\\buhre\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.2-full_build\\bin\\ffmpeg.exe';
+const ARTIFACT_DIR = 'C:\\Users\\buhre\\.gemini\\antigravity\\brain\\47c87d7b-c797-4540-9a3d-af5cae8dccc8';
 
-// 1. Static file server for dist/
 function startServer() {
   const mimeTypes = {
     '.html': 'text/html',
@@ -21,7 +21,8 @@ function startServer() {
     '.svg': 'image/svg+xml',
     '.json': 'application/json',
     '.mp3': 'audio/mpeg',
-    '.wav': 'audio/wav'
+    '.wav': 'audio/wav',
+    '.png': 'image/png'
   };
 
   const server = http.createServer((req, res) => {
@@ -36,7 +37,7 @@ function startServer() {
     fs.readFile(filePath, (err, content) => {
       if (err) {
         res.writeHead(500);
-        res.end('Error loading file');
+        res.end('Error');
       } else {
         res.writeHead(200, { 'Content-Type': contentType });
         res.end(content);
@@ -46,16 +47,66 @@ function startServer() {
 
   return new Promise((resolve) => {
     server.listen(PORT, () => {
-      console.log(`Static server running on http://localhost:${PORT}`);
+      console.log(`Server running on http://localhost:${PORT}`);
       resolve(server);
     });
   });
 }
 
-async function run() {
-  const server = await startServer();
+// Convert audio to raw 16-bit 44.1kHz stereo PCM
+function extractPcm(filePath) {
+  const tempPcm = path.join(__dirname, `temp_${Date.now()}_${Math.random().toString(36).slice(2)}.pcm`);
+  try {
+    execSync(`"${FFMPEG_PATH}" -y -i "${filePath}" -ar 44100 -ac 2 -f s16le "${tempPcm}"`, { stdio: 'pipe' });
+    const buf = fs.readFileSync(tempPcm);
+    fs.unlinkSync(tempPcm);
+    return buf;
+  } catch (err) {
+    console.error(`Failed to extract PCM for ${filePath}:`, err.message);
+    if (fs.existsSync(tempPcm)) fs.unlinkSync(tempPcm);
+    return Buffer.alloc(0);
+  }
+}
 
-  console.log('Launching browser (Edge)...');
+// Write standard 16-bit stereo WAV
+function writeWavFile(filePath, leftChannel, rightChannel, sampleRate = 44100) {
+  const numSamples = leftChannel.length;
+  const byteRate = sampleRate * 2 * 2;
+  const blockAlign = 4;
+  const dataSize = numSamples * 4;
+  const header = Buffer.alloc(44);
+
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + dataSize, 4);
+  header.write('WAVE', 8);
+  header.write('fmt ', 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20); // PCM format
+  header.writeUInt16LE(2, 22); // Stereo
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(16, 34); // 16-bit
+  header.write('data', 36);
+  header.writeUInt32LE(dataSize, 40);
+
+  const data = Buffer.alloc(dataSize);
+  for (let i = 0; i < numSamples; i++) {
+    const lClamped = Math.max(-1.0, Math.min(1.0, leftChannel[i]));
+    const rClamped = Math.max(-1.0, Math.min(1.0, rightChannel[i]));
+    const l16 = lClamped < 0 ? Math.round(lClamped * 32768) : Math.round(lClamped * 32767);
+    const r16 = rClamped < 0 ? Math.round(rClamped * 32768) : Math.round(rClamped * 32767);
+    data.writeInt16LE(l16, i * 4);
+    data.writeInt16LE(r16, i * 4 + 2);
+  }
+
+  fs.writeFileSync(filePath, Buffer.concat([header, data]));
+}
+
+async function record10sGameplay() {
+  const server = await startServer();
+  console.log('Launching browser for 10-second gameplay recording...');
+
   const browser = await puppeteer.launch({
     executablePath: 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
     headless: true,
@@ -65,30 +116,22 @@ async function run() {
       '--enable-webgl',
       '--ignore-gpu-blocklist',
       '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--window-size=1280,720',
       '--autoplay-policy=no-user-gesture-required'
     ],
     defaultViewport: { width: 1280, height: 720 }
   });
 
   const page = await browser.newPage();
-  console.log(`Navigating to http://localhost:${PORT}...`);
   await page.goto(`http://localhost:${PORT}`, { waitUntil: 'domcontentloaded' });
-
-  // Wait for canvas
   await page.waitForSelector('canvas');
-  console.log('Canvas loaded. Setting up MediaRecorder in page...');
+  await new Promise(r => setTimeout(r, 1200));
 
-  // Inject recorder
   await page.evaluate(() => {
     const canvas = document.querySelector('canvas');
     const stream = canvas.captureStream(30);
-
-    let mimeType = 'video/webm;codecs=vp9';
-    if (!MediaRecorder.isTypeSupported(mimeType)) {
-      mimeType = 'video/webm';
-    }
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+      ? 'video/webm;codecs=vp9'
+      : 'video/webm';
 
     const recorder = new MediaRecorder(stream, {
       mimeType,
@@ -98,6 +141,8 @@ async function run() {
     window.__mediaRecorder = recorder;
     window.__recordedChunks = [];
     window.__recordingDone = false;
+    window.__audioEvents = [];
+    window.__flightStart = 0;
 
     recorder.ondataavailable = (e) => {
       if (e.data && e.data.size > 0) window.__recordedChunks.push(e.data);
@@ -114,132 +159,194 @@ async function run() {
     };
 
     recorder.start(100);
+
+    const game = window.gameInstance;
+    window.__flightStart = performance.now();
+
+    // Hook flap input to log wing flap whooshes
+    const origFlap = game.handleFlapInput.bind(game);
+    game.handleFlapInput = (side) => {
+      window.__audioEvents.push({
+        type: 'flap',
+        timeMs: performance.now() - window.__flightStart
+      });
+      return origFlap(side);
+    };
+
+    // Track score for chime sound
+    let prevScore = 0;
+    setInterval(() => {
+      if (game.score > prevScore) {
+        prevScore = game.score;
+        window.__audioEvents.push({
+          type: 'score',
+          score: game.score,
+          timeMs: performance.now() - window.__flightStart
+        });
+      }
+    }, 16);
+
+    // Start game
+    game.startGame();
+
+    // High-performance predictive flight autopilot
+    let running = true;
+    const ticker = () => {
+      if (!running) return;
+      if (game.state === 'PLAYING') {
+        const playerZ = game.playerRig.position.z;
+        const playerY = game.playerRig.position.y;
+        const vy = game.velocityY;
+
+        // Passed pipe boundary: playerZ <= pipeZ - 1.5
+        const upcoming = game.pipeManager.pipes
+          .filter(p => p.group.position.z < playerZ + 1.5)
+          .sort((a, b) => b.group.position.z - a.group.position.z);
+
+        const targetPipe = upcoming[0];
+        if (targetPipe) {
+          const targetY = targetPipe.gapY;
+          const distZ = Math.max(0.01, playerZ - targetPipe.group.position.z);
+
+          // Only flap if below the ceiling limit of this gap
+          if (playerY < targetY + 1.0) {
+            if (playerY < targetY - 0.28 || (distZ < 9.0 && playerY < targetY + 0.15 && vy < -1.8)) {
+              game.handleFlapInput('both');
+            }
+          }
+        }
+      }
+      requestAnimationFrame(ticker);
+    };
+    requestAnimationFrame(ticker);
+    window.__stopAutopilot = () => { running = false; };
   });
 
-  console.log('Recording started! Simulating gameplay...');
+  const durationSec = 10;
+  console.log(`Recording 10 seconds of gameplay...`);
+  await new Promise(r => setTimeout(r, durationSec * 1000));
 
-  // Phase 1: Wait 1.5s on Title Screen
-  await new Promise(r => setTimeout(r, 1500));
-
-  // Phase 2: Start Game with first flap!
-  console.log('Taking off!');
-  await page.keyboard.press('Space');
-  await new Promise(r => setTimeout(r, 450));
-
-  // Phase 3: Smart autopilot loop through pipes
-  const startTime = Date.now();
-  const maxFlightDuration = 8500; // ~8.5 seconds flight
-
-  while (Date.now() - startTime < maxFlightDuration) {
-    const shouldFlap = await page.evaluate(() => {
-      const game = window.gameInstance;
-      if (!game || game.state !== 'PLAYING') return false;
-
-      // Find the next upcoming pipe
-      const playerZ = game.playerRig.position.z;
-      const playerY = game.playerRig.position.y;
-      const vy = game.velocityY;
-
-      const aheadPipes = game.pipeManager.pipes
-        .filter(p => p.group.position.z < playerZ + 2)
-        .sort((a, b) => b.group.position.z - a.group.position.z);
-
-      const nextPipe = aheadPipes[0];
-      const targetY = nextPipe ? nextPipe.gapY : 5.0;
-
-      // Flap if falling below target gap height
-      if (playerY < targetY - 0.25 || (playerY < targetY + 0.3 && vy < -2.2)) {
-        return true;
-      }
-      return false;
-    });
-
-    if (shouldFlap) {
-      await page.keyboard.press('Space');
-    }
-
-    await new Promise(r => setTimeout(r, 70));
-  }
-
-  // Phase 4: Intentionally drop into pipe / ground to demonstrate BONK & Game Over sound
-  console.log('Demonstrating collision & Game Over screen...');
-  await new Promise(r => setTimeout(r, 2200));
-
-  // Phase 5: Flap to retry
-  console.log('Retrying...');
-  await page.keyboard.press('Space');
-  await new Promise(r => setTimeout(r, 1000));
-
-  // Stop recording
-  console.log('Stopping recorder...');
+  console.log('10 seconds elapsed. Stopping recorder...');
   await page.evaluate(() => {
+    if (window.__stopAutopilot) window.__stopAutopilot();
     window.__mediaRecorder.stop();
   });
 
-  // Wait for base64 conversion
-  await page.waitForFunction(() => window.__recordingDone === true, { timeout: 10000 });
+  await page.waitForFunction(() => window.__recordingDone === true, { timeout: 15000 });
 
-  const base64Data = await page.evaluate(() => window.__recordedVideoBase64);
-  console.log(`Video recorded! Data size: ${Math.round(base64Data.length / 1024)} KB`);
+  const { base64Data, audioEvents, finalScore, finalDistance } = await page.evaluate(() => ({
+    base64Data: window.__recordedVideoBase64,
+    audioEvents: window.__audioEvents,
+    finalScore: window.gameInstance ? window.gameInstance.score : 0,
+    finalDistance: window.gameInstance ? Math.round(Math.abs(window.gameInstance.playerRig.position.z)) : 0
+  }));
+
+  console.log(`Recorded 10s gameplay! Score: ${finalScore}, Distance: ${finalDistance}m, Audio events: ${audioEvents.length}`);
 
   const webmPath = path.join(__dirname, 'gameplay.webm');
   fs.writeFileSync(webmPath, Buffer.from(base64Data, 'base64'));
-  console.log(`Saved WebM to ${webmPath}`);
 
   await browser.close();
   server.close();
 
-  // Convert with ffmpeg
+  // ----------------------------------------------------
+  // Clean Audio Synthesis (SFX + Looping BGM, No Voice)
+  // ----------------------------------------------------
+  console.log('Synthesizing clean audio track for 10s video...');
+  const sampleRate = 44100;
+  const totalDurationSec = 10.5;
+  const totalSamples = Math.round(totalDurationSec * sampleRate);
+  const masterL = new Float32Array(totalSamples);
+  const masterR = new Float32Array(totalSamples);
+
+  const bgmPcm = extractPcm(path.join(__dirname, 'src', 'assets', 'bgm.mp3'));
+  const flapPcms = [
+    extractPcm(path.join(__dirname, 'src', 'assets', 'sfx', 'flap_1.mp3')),
+    extractPcm(path.join(__dirname, 'src', 'assets', 'sfx', 'flap_2.mp3')),
+    extractPcm(path.join(__dirname, 'src', 'assets', 'sfx', 'flap_3.mp3'))
+  ];
+
+  // Synthetic glockenspiel ring chime
+  function createChimePcm() {
+    const durSec = 0.45;
+    const numSamples = Math.round(durSec * sampleRate);
+    const buf = Buffer.alloc(numSamples * 4);
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / sampleRate;
+      const s1 = Math.sin(2 * Math.PI * 784 * t) * Math.exp(-t * 9.0);
+      const s2 = t > 0.08 ? Math.sin(2 * Math.PI * 1046.5 * (t - 0.08)) * Math.exp(-(t - 0.08) * 8.0) : 0;
+      const val = Math.max(-1.0, Math.min(1.0, (s1 * 0.45 + s2 * 0.65) * 0.85));
+      const s16 = val < 0 ? Math.round(val * 32768) : Math.round(val * 32767);
+      buf.writeInt16LE(s16, i * 4);
+      buf.writeInt16LE(s16, i * 4 + 2);
+    }
+    return buf;
+  }
+  const chimePcm = createChimePcm();
+
+  function mixBuffer(pcmBuffer, startSample, gain = 1.0) {
+    if (!pcmBuffer || pcmBuffer.length === 0) return;
+    const numPcmSamples = pcmBuffer.length / 4;
+    for (let i = 0; i < numPcmSamples; i++) {
+      const targetIdx = startSample + i;
+      if (targetIdx >= totalSamples) break;
+      const l = (pcmBuffer.readInt16LE(i * 4 + 0) / 32768.0) * gain;
+      const r = (pcmBuffer.readInt16LE(i * 4 + 2) / 32768.0) * gain;
+      masterL[targetIdx] += l;
+      masterR[targetIdx] += r;
+    }
+  }
+
+  // Mix SFX events (flaps & chimes)
+  let flapIndex = 0;
+  for (const ev of audioEvents) {
+    const startSample = Math.round((ev.timeMs / 1000) * sampleRate);
+    if (startSample >= totalSamples) continue;
+
+    if (ev.type === 'flap') {
+      const pcm = flapPcms[flapIndex % flapPcms.length];
+      flapIndex++;
+      mixBuffer(pcm, startSample, 0.85);
+    } else if (ev.type === 'score') {
+      mixBuffer(chimePcm, startSample, 0.75);
+    }
+  }
+
+  // Mix clean looping BGM
+  const bgmSamples = bgmPcm.length / 4;
+  for (let i = 0; i < totalSamples; i++) {
+    const bgmIdx = i % bgmSamples;
+    const l = (bgmPcm.readInt16LE(bgmIdx * 4 + 0) / 32768.0) * 0.36;
+    const r = (bgmPcm.readInt16LE(bgmIdx * 4 + 2) / 32768.0) * 0.36;
+    masterL[i] += l;
+    masterR[i] += r;
+  }
+
+  const audioWavPath = path.join(__dirname, 'gameplay_audio.wav');
+  writeWavFile(audioWavPath, masterL, masterR, sampleRate);
+
   const mp4Path = path.join(__dirname, 'gameplay.mp4');
   const gifPath = path.join(__dirname, 'gameplay.gif');
 
-  const bgmPath = path.join(__dirname, 'src', 'assets', 'bgm.mp3');
-  const vFight = path.join(__dirname, 'src', 'assets', 'voice', 'voice_fight.mp3');
-  const v1 = path.join(__dirname, 'src', 'assets', 'voice', 'voice_1.mp3');
-  const v2 = path.join(__dirname, 'src', 'assets', 'voice', 'voice_2.mp3');
-  const v3 = path.join(__dirname, 'src', 'assets', 'voice', 'voice_3.mp3');
-  const f1 = path.join(__dirname, 'src', 'assets', 'sfx', 'flap_1.mp3');
-  const f2 = path.join(__dirname, 'src', 'assets', 'sfx', 'flap_2.mp3');
-  const bonk = path.join(__dirname, 'src', 'assets', 'sfx', 'bonk.mp3');
-  const gameover = path.join(__dirname, 'src', 'assets', 'sfx', 'gameover.mp3');
-  const vFatality = path.join(__dirname, 'src', 'assets', 'voice', 'voice_fatality.mp3');
+  console.log('Encoding 10s MP4...');
+  execSync(`"${FFMPEG_PATH}" -y -i "${webmPath}" -i "${audioWavPath}" -c:v libx264 -pix_fmt yuv420p -r 30 -c:a aac -b:a 192k -t 10 -shortest "${mp4Path}"`, { stdio: 'inherit' });
 
-  console.log('Converting WebM to MP4 with BGM, Flaps, Giddy Little Girl Voice Announcer (Yay! Fight!, Oooone!, Twoooo!, Threeeee!, Uh oooooh!), Bonk, and Sad Trombone...');
+  console.log('Encoding 10s animated GIF...');
+  execSync(`"${FFMPEG_PATH}" -y -i "${mp4Path}" -vf "fps=14,scale=560:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256[p];[s1][p]paletteuse=dither=bayer" "${gifPath}"`, { stdio: 'inherit' });
 
-  // Audio filter mixing:
-  // [1:a] BGM volume 0.30
-  // [2:a] Fight! at 1500ms
-  // [3:a] voice 1 at 4200ms
-  // [4:a] voice 2 at 6800ms
-  // [5:a] voice 3 at 9200ms
-  // [6:a] flap 1 at 1500ms
-  // [7:a] flap 2 at 1950ms
-  // [8:a] bonk at 10800ms
-  // [9:a] gameover sad trombone at 11050ms
-  // [10:a] Fatality! at 12200ms
-  const filterComplex = `[1:a]volume=0.30[bgm];` +
-    `[2:a]adelay=1500|1500,volume=1.35[vf];` +
-    `[3:a]adelay=4200|4200,volume=1.35[v1];` +
-    `[4:a]adelay=6800|6800,volume=1.35[v2];` +
-    `[5:a]adelay=9200|9200,volume=1.35[v3];` +
-    `[6:a]adelay=1500|1500,volume=0.90[f1];` +
-    `[7:a]adelay=1950|1950,volume=0.90[f2];` +
-    `[8:a]adelay=10800|10800,volume=1.4[bnk];` +
-    `[9:a]adelay=11050|11050,volume=1.15[gov];` +
-    `[10:a]adelay=12200|12200,volume=1.45[vfat];` +
-    `[bgm][vf][v1][v2][v3][f1][f2][bnk][gov][vfat]amix=inputs=10:duration=first:dropout_transition=2[aout]`;
+  // Copy to brain artifact directory
+  if (fs.existsSync(ARTIFACT_DIR)) {
+    fs.copyFileSync(mp4Path, path.join(ARTIFACT_DIR, 'gameplay.mp4'));
+    fs.copyFileSync(gifPath, path.join(ARTIFACT_DIR, 'gameplay.gif'));
+    console.log(`Copied artifacts to ${ARTIFACT_DIR}`);
+  }
 
-  execSync(`"${FFMPEG_PATH}" -y -i "${webmPath}" -i "${bgmPath}" -i "${vFight}" -i "${v1}" -i "${v2}" -i "${v3}" -i "${f1}" -i "${f2}" -i "${bonk}" -i "${gameover}" -i "${vFatality}" -filter_complex "${filterComplex}" -map 0:v -map "[aout]" -c:v libx264 -pix_fmt yuv420p -r 30 -c:a aac -b:a 192k -shortest "${mp4Path}"`, { stdio: 'inherit' });
-
-  console.log('Generating high-quality animated GIF with ffmpeg...');
-  execSync(`"${FFMPEG_PATH}" -y -i "${mp4Path}" -vf "fps=15,scale=640:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" "${gifPath}"`, { stdio: 'inherit' });
-
-  console.log('SUCCESS! Video files generated:');
+  console.log('SUCCESS! Generated 10-second gameplay artifacts:');
   console.log(`- MP4: ${mp4Path}`);
   console.log(`- GIF: ${gifPath}`);
 }
 
-run().catch(err => {
-  console.error('Recording error:', err);
+record10sGameplay().catch(err => {
+  console.error('Error during 10s gameplay recording:', err);
   process.exit(1);
 });
