@@ -11,8 +11,12 @@ namespace FloppyFlight.Editor
     public class FloppyBirdImporter : AssetPostprocessor
     {
         const string ModelPath = "Assets/Art/Bird/FloppyBird.fbx";
+        const string PurpleModelPath = "Assets/Art/Bird/PurpleBird.fbx";
 
-        bool IsBird => assetPath.Replace('\\', '/') == ModelPath;
+        string NormalizedPath => assetPath.Replace('\\', '/');
+        bool IsOrange => NormalizedPath == ModelPath;
+        bool IsPurple => NormalizedPath == PurpleModelPath;
+        bool IsBird => IsOrange || IsPurple;
 
         void OnPreprocessModel()
         {
@@ -72,13 +76,14 @@ namespace FloppyFlight.Editor
             return true;
         }
 
-        static void RemapMaterials(ModelImporter importer)
+        void RemapMaterials(ModelImporter importer)
         {
             var map = importer.GetExternalObjectMap();
             var pending = new System.Collections.Generic.List<string>();
-            foreach (var name in BirdPrefabSetup.MaterialNames)
+            var names = IsPurple ? BirdPrefabSetup.PurpleMaterialNames : BirdPrefabSetup.MaterialNames;
+            foreach (var name in names)
             {
-                var material = AssetDatabase.LoadAssetAtPath<Material>(BirdPrefabSetup.MaterialPath(name));
+                var material = AssetDatabase.LoadAssetAtPath<Material>(MaterialAssetPath(name));
                 if (material == null) continue;
 
                 var already = false;
@@ -96,9 +101,16 @@ namespace FloppyFlight.Editor
             for (var i = 0; i < pending.Count; i++)
             {
                 var name = pending[i];
-                var material = AssetDatabase.LoadAssetAtPath<Material>(BirdPrefabSetup.MaterialPath(name));
+                var material = AssetDatabase.LoadAssetAtPath<Material>(MaterialAssetPath(name));
                 importer.AddRemap(new AssetImporter.SourceAssetIdentifier(typeof(Material), name), material);
             }
+        }
+
+        string MaterialAssetPath(string materialName)
+        {
+            return IsPurple
+                ? BirdPrefabSetup.PurpleMaterialPath(materialName)
+                : BirdPrefabSetup.MaterialPath(materialName);
         }
     }
 }

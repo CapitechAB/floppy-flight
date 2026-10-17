@@ -5,7 +5,8 @@ using UnityEngine;
 namespace FloppyFlight.Flight
 {
     /// <summary>
-    /// Ends a run when the headset proxy hits a pipe, a floppy bird, or the ground.
+    /// Ends a run when the headset proxy hits a pipe, a bird obstacle, or the ground.
+    /// The orange and purple birds both carry FloppyBird, so one parent check covers both.
     /// PipePair and FloppyBird have no collision logic of their own; this lives on the eye anchor.
     /// </summary>
     public class FlightCollision : MonoBehaviour
