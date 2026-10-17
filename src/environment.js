@@ -15,7 +15,8 @@ export class Environment {
     this.grassTufts = [];
     this.sideTrees = [];
     this.sideTerraces = [];
-    this.treelinePlanes = [];
+    this.innerTreelineSegments = [];
+    this.outerTreelineSegments = [];
     this.vFlock = null;
     this.elapsedTime = 0;
     this.leafParticles = null;
@@ -235,7 +236,7 @@ export class Environment {
     this.groundGroup = groundGroup;
   }
 
-  createTreelineTexture(isFar = false) {
+  createTreelineTexture(isFar = false, variant = 0) {
     const canvas = document.createElement('canvas');
     canvas.width = 512;
     canvas.height = 128;
@@ -243,7 +244,7 @@ export class Environment {
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, 512, 128);
 
-    // Stepped pixel pine tree
+    // Stepped pixel pine tree with wrapping
     function drawSteppedPine(cx, baseY, w, h, darkColor, midColor, lightColor, highlightColor) {
       const tiers = 3;
       for (let t = 0; t < tiers; t++) {
@@ -282,7 +283,7 @@ export class Environment {
       }
     }
 
-    // Stepped pixel round oak tree
+    // Stepped pixel round oak tree with wrapping
     function drawSteppedOak(cx, baseY, radius, darkColor, midColor, lightColor, highlightColor) {
       const subSpheres = [
         { ox: 0, oy: -radius * 0.8, r: radius * 0.9 },
@@ -331,41 +332,55 @@ export class Environment {
       }
     }
 
+    // Wrap drawing across boundaries so texture tiles seamlessly
+    const wrapPine = (cx, baseY, w, h, d, m, l, hl) => {
+      drawSteppedPine(cx, baseY, w, h, d, m, l, hl);
+      if (cx - w / 2 < 0) drawSteppedPine(cx + 512, baseY, w, h, d, m, l, hl);
+      if (cx + w / 2 > 512) drawSteppedPine(cx - 512, baseY, w, h, d, m, l, hl);
+    };
+
+    const wrapOak = (cx, baseY, r, d, m, l, hl) => {
+      drawSteppedOak(cx, baseY, r, d, m, l, hl);
+      if (cx - r < 0) drawSteppedOak(cx + 512, baseY, r, d, m, l, hl);
+      if (cx + r > 512) drawSteppedOak(cx - 512, baseY, r, d, m, l, hl);
+    };
+
     if (isFar) {
       // Distant ridge
-      for (let x = -20; x <= 530; x += 36) {
+      for (let x = 0; x < 512; x += 36) {
         if ((x % 72) === 0) {
-          drawSteppedPine(x, 128, 40, 58, '#244c35', '#2f6043', '#3f7c57', '#7dc495');
+          wrapPine(x, 128, 40, 58, '#244c35', '#2f6043', '#3f7c57', '#7dc495');
         } else {
-          drawSteppedOak(x, 128, 28, '#244c35', '#2f6043', '#3f7c57', '#7dc495');
+          wrapOak(x, 128, 28, '#244c35', '#2f6043', '#3f7c57', '#7dc495');
         }
       }
-      for (let x = -10; x <= 530; x += 44) {
+      for (let x = 18; x < 512; x += 44) {
         if ((x % 88) === 0) {
-          drawSteppedPine(x, 128, 46, 72, '#1a3f2d', '#23523c', '#2c6d4f', '#96dbae');
+          wrapPine(x, 128, 46, 72, '#1a3f2d', '#23523c', '#2c6d4f', '#96dbae');
         } else {
-          drawSteppedOak(x, 128, 32, '#1a3f2d', '#23523c', '#2c6d4f', '#96dbae');
+          wrapOak(x, 128, 32, '#1a3f2d', '#23523c', '#2c6d4f', '#96dbae');
         }
       }
       ctx.fillStyle = '#122e20';
       ctx.fillRect(0, 105, 512, 23);
     } else {
       // Foreground lush ridge with golden sunrise highlights
-      for (let x = -20; x <= 530; x += 40) {
-        drawSteppedOak(x, 128, 26, '#264e36', '#316645', '#45855c', '#89d4a3');
+      const offset = variant * 28;
+      for (let x = offset % 40; x < 512 + (offset % 40); x += 40) {
+        wrapOak(x % 512, 128, 26, '#264e36', '#316645', '#45855c', '#89d4a3');
       }
-      for (let x = -10; x <= 530; x += 48) {
-        if ((x % 96) === 0) {
-          drawSteppedPine(x, 128, 48, 76, '#1b4332', '#245942', '#2d7a56', '#a3e6be');
+      for (let x = (14 + offset) % 48; x < 512 + ((14 + offset) % 48); x += 48) {
+        if (((x + variant * 12) % 96) < 48) {
+          wrapPine(x % 512, 128, 48, 76, '#1b4332', '#245942', '#2d7a56', '#a3e6be');
         } else {
-          drawSteppedOak(x, 128, 32, '#1b4332', '#245942', '#2d7a56', '#a3e6be');
+          wrapOak(x % 512, 128, 32, '#1b4332', '#245942', '#2d7a56', '#a3e6be');
         }
       }
-      for (let x = 8; x <= 530; x += 56) {
-        if ((x % 112) === 0) {
-          drawSteppedPine(x, 128, 52, 90, '#133624', '#1c4a32', '#246342', '#ffd32a');
+      for (let x = (26 + offset) % 56; x < 512 + ((26 + offset) % 56); x += 56) {
+        if (((x + variant * 20) % 112) < 56) {
+          wrapPine(x % 512, 128, 52, 90, '#133624', '#1c4a32', '#246342', '#ffd32a');
         } else {
-          drawSteppedOak(x, 128, 38, '#133624', '#1c4a32', '#246342', '#ffd32a');
+          wrapOak(x % 512, 128, 38, '#133624', '#1c4a32', '#246342', '#ffd32a');
         }
       }
       ctx.fillStyle = '#133624';
@@ -377,56 +392,90 @@ export class Environment {
     tex.wrapT = THREE.ClampToEdgeWrapping;
     tex.magFilter = THREE.NearestFilter;
     tex.minFilter = THREE.LinearFilter;
-    tex.repeat.set(6, 1);
+    tex.repeat.set(1, 1);
     return tex;
   }
 
   createSideForest() {
-    // 1. Layered Pixel-Art Treeline Billboard Ridges (Proportional height framing the ground)
-    const nearTex = this.createTreelineTexture(false);
-    const farTex = this.createTreelineTexture(true);
+    // 1. Layered Pixel-Art Treeline Billboard Segments (anchored in world coordinates!)
+    const nearTexA = this.createTreelineTexture(false, 0);
+    const nearTexB = this.createTreelineTexture(false, 1);
+    const farTex = this.createTreelineTexture(true, 0);
 
-    const nearTreelineMat = new THREE.MeshBasicMaterial({
-      map: nearTex,
+    const nearMatA = new THREE.MeshBasicMaterial({
+      map: nearTexA,
       transparent: true,
       alphaTest: 0.15,
       side: THREE.DoubleSide
     });
 
-    const farTreelineMat = new THREE.MeshBasicMaterial({
+    const nearMatB = new THREE.MeshBasicMaterial({
+      map: nearTexB,
+      transparent: true,
+      alphaTest: 0.15,
+      side: THREE.DoubleSide
+    });
+
+    const farMat = new THREE.MeshBasicMaterial({
       map: farTex,
       transparent: true,
       alphaTest: 0.15,
       side: THREE.DoubleSide
     });
 
-    // Inner treeline planes (X = ±27m, 7.5m tall sitting at ground level)
-    const innerGeom = new THREE.PlaneGeometry(360, 7.5);
-    const leftInner = new THREE.Mesh(innerGeom, nearTreelineMat);
-    leftInner.position.set(-27, 3.75, -120);
-    leftInner.rotation.y = Math.PI / 2 + 0.04;
-    this.scene.add(leftInner);
-    this.treelinePlanes.push(leftInner);
+    this.innerTreelineSegments = [];
+    this.outerTreelineSegments = [];
 
-    const rightInner = new THREE.Mesh(innerGeom, nearTreelineMat);
-    rightInner.position.set(27, 3.75, -120);
-    rightInner.rotation.y = -Math.PI / 2 - 0.04;
-    this.scene.add(rightInner);
-    this.treelinePlanes.push(rightInner);
+    // Inner treeline segments (X = ±26m, 7.5m tall sitting at ground level Y = 3.75m)
+    // 8 segments of 48m each = 384m continuous wall on left and right
+    const innerSegLength = 48.0;
+    const innerSegHeight = 7.5;
+    const innerSegGeom = new THREE.PlaneGeometry(innerSegLength, innerSegHeight);
+    const numInnerSegs = 8;
 
-    // Outer treeline planes (X = ±46m, 11m tall background ridge)
-    const outerGeom = new THREE.PlaneGeometry(420, 11.0);
-    const leftOuter = new THREE.Mesh(outerGeom, farTreelineMat);
-    leftOuter.position.set(-46, 5.5, -120);
-    leftOuter.rotation.y = Math.PI / 2 + 0.02;
-    this.scene.add(leftOuter);
-    this.treelinePlanes.push(leftOuter);
+    for (let i = 0; i < numInnerSegs; i++) {
+      const z = 24.0 - (i * innerSegLength);
+      const mat = (i % 2 === 0) ? nearMatA : nearMatB;
 
-    const rightOuter = new THREE.Mesh(outerGeom, farTreelineMat);
-    rightOuter.position.set(46, 5.5, -120);
-    rightOuter.rotation.y = -Math.PI / 2 - 0.02;
-    this.scene.add(rightOuter);
-    this.treelinePlanes.push(rightOuter);
+      // Left inner segment
+      const leftSeg = new THREE.Mesh(innerSegGeom, mat);
+      leftSeg.position.set(-26.0, innerSegHeight / 2, z);
+      leftSeg.rotation.y = Math.PI / 2 + 0.03;
+      this.scene.add(leftSeg);
+      this.innerTreelineSegments.push(leftSeg);
+
+      // Right inner segment
+      const rightSeg = new THREE.Mesh(innerSegGeom, mat);
+      rightSeg.position.set(26.0, innerSegHeight / 2, z);
+      rightSeg.rotation.y = -Math.PI / 2 - 0.03;
+      this.scene.add(rightSeg);
+      this.innerTreelineSegments.push(rightSeg);
+    }
+
+    // Outer treeline segments (X = ±46m, 11.5m tall sitting at ground level Y = 5.75m)
+    // 7 segments of 60m each = 420m continuous wall on left and right
+    const outerSegLength = 60.0;
+    const outerSegHeight = 11.5;
+    const outerSegGeom = new THREE.PlaneGeometry(outerSegLength, outerSegHeight);
+    const numOuterSegs = 7;
+
+    for (let i = 0; i < numOuterSegs; i++) {
+      const z = 30.0 - (i * outerSegLength);
+
+      // Left outer segment
+      const leftOuter = new THREE.Mesh(outerSegGeom, farMat);
+      leftOuter.position.set(-46.0, outerSegHeight / 2, z);
+      leftOuter.rotation.y = Math.PI / 2 + 0.02;
+      this.scene.add(leftOuter);
+      this.outerTreelineSegments.push(leftOuter);
+
+      // Right outer segment
+      const rightOuter = new THREE.Mesh(outerSegGeom, farMat);
+      rightOuter.position.set(46.0, outerSegHeight / 2, z);
+      rightOuter.rotation.y = -Math.PI / 2 - 0.02;
+      this.scene.add(rightOuter);
+      this.outerTreelineSegments.push(rightOuter);
+    }
 
     // 2. Procedural 3D Cartoon Trees (Foreground & Midground with real stereo volume & shadows)
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x784e2d, roughness: 0.8 });
@@ -487,13 +536,13 @@ export class Environment {
       this.sideTrees.push({ group: tree, x, initialZ: z });
     };
 
-    // Spawn 48 trees along both sides
-    const treeCount = 48;
+    // Spawn 64 trees along both sides
+    const treeCount = 64;
     for (let i = 0; i < treeCount; i++) {
       const side = (i % 2 === 0) ? -1 : 1;
       const type = (i % 3 === 0) ? 'oak' : 'pine';
-      const x = side * (13.5 + (i % 5) * 3.2 + Math.random() * 2.5);
-      const z = -6 - (i * 4.5) + (Math.random() - 0.5) * 5.0;
+      const x = side * (13.5 + (i % 5) * 2.5 + Math.random() * 2.0);
+      const z = 8 - (i * 3.8) + (Math.random() - 0.5) * 3.0;
       const scale = 0.95 + Math.random() * 0.55;
       spawnTree(type, x, z, scale);
     }
@@ -567,11 +616,13 @@ export class Environment {
       this.sideTerraces.push({ group, x, initialZ: z });
     };
 
-    // Spawn 4 prominent raised ledges along the flanks
-    spawnTerrace(17.5, -35, 6.5, 1.8, 16);
-    spawnTerrace(-18.0, -75, 7.0, 2.0, 18);
-    spawnTerrace(19.0, -125, 6.5, 1.9, 16);
-    spawnTerrace(-18.5, -170, 7.0, 2.1, 18);
+    // Spawn 6 prominent raised ledges along the flanks
+    spawnTerrace(17.5, -25, 6.5, 1.8, 18);
+    spawnTerrace(-18.0, -60, 7.0, 2.0, 20);
+    spawnTerrace(18.5, -100, 6.5, 1.9, 18);
+    spawnTerrace(-18.5, -140, 7.0, 2.1, 20);
+    spawnTerrace(19.0, -180, 6.5, 1.9, 18);
+    spawnTerrace(-18.0, -220, 7.0, 2.0, 20);
   }
 
   createGrassTufts() {
@@ -1117,11 +1168,11 @@ export class Environment {
       }
     }
 
-    // Animate and recycle 3D side trees
+    // Animate and recycle 3D side trees (fixed in world coordinates, recycling seamlessly when passed)
     for (let i = 0; i < this.sideTrees.length; i++) {
       const tree = this.sideTrees[i];
       if (tree.group.position.z > playerZ + 25) {
-        tree.group.position.z = playerZ - 180 - Math.random() * 35;
+        tree.group.position.z = playerZ - 230 - Math.random() * 25;
       }
     }
 
@@ -1129,16 +1180,31 @@ export class Environment {
     for (let i = 0; i < this.sideTerraces.length; i++) {
       const terrace = this.sideTerraces[i];
       if (terrace.group.position.z > playerZ + 30) {
-        terrace.group.position.z = playerZ - 200 - Math.random() * 40;
+        terrace.group.position.z = playerZ - 230 - Math.random() * 25;
       }
     }
 
-    // Treeline billboard planes follow playerZ for seamless forest valley
-    for (let i = 0; i < this.treelinePlanes.length; i++) {
-      this.treelinePlanes[i].position.z = playerZ - 120;
+    // Treeline billboard planes stay at fixed world Z positions!
+    // As player flies forward along -Z, the segments stay anchored in space, so the trees physically rush past the player!
+    const innerRecycleZ = playerZ + 48.0;
+    const innerTotalSpan = 8 * 48.0; // 384m
+    for (let i = 0; i < this.innerTreelineSegments.length; i++) {
+      const seg = this.innerTreelineSegments[i];
+      if (seg.position.z > innerRecycleZ) {
+        seg.position.z -= innerTotalSpan;
+      }
     }
 
-    // Animate cute inspiration background birds (flapping wings & gentle flight paths)
+    const outerRecycleZ = playerZ + 60.0;
+    const outerTotalSpan = 7 * 60.0; // 420m
+    for (let i = 0; i < this.outerTreelineSegments.length; i++) {
+      const seg = this.outerTreelineSegments[i];
+      if (seg.position.z > outerRecycleZ) {
+        seg.position.z -= outerTotalSpan;
+      }
+    }
+
+    // Animate cute inspiration background birds (flapping wings & flying past in world space)
     for (let i = 0; i < this.bgBirds.length; i++) {
       const bird = this.bgBirds[i];
       bird.phase += delta * 11.0;
@@ -1147,11 +1213,11 @@ export class Environment {
       if (bird.rightWing) bird.rightWing.rotation.z = -wingAngle;
 
       bird.group.position.z -= bird.speed * delta;
-      bird.group.position.y = bird.initialY + Math.sin(bird.phase * 0.35) * 0.35;
-      bird.group.position.x = bird.initialX + Math.cos(bird.phase * 0.25) * 0.25;
+      bird.group.position.y = bird.initialY + Math.sin(bird.phase * 0.35) * 0.4;
+      bird.group.position.x = bird.initialX + Math.cos(bird.phase * 0.25) * 0.5;
 
-      if (bird.group.position.z > playerZ + 20) {
-        bird.group.position.z = playerZ - 160 - Math.random() * 40;
+      if (bird.group.position.z > playerZ + 25) {
+        bird.group.position.z = playerZ - 150 - Math.random() * 40;
       }
     }
 
