@@ -14,6 +14,7 @@ using UnityEditor.XR.Management.Metadata;
 using UnityEditor.XR.OpenXR.Features;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.XR.Management;
 using UnityEngine.XR.OpenXR;
 using UnityEngine.XR.OpenXR.Features.MetaQuestSupport;
 
@@ -27,14 +28,18 @@ namespace FloppyFlight.Editor
     public static class BuildScript
     {
         public const string PackageName = "com.capitechab.floppyflight";
+        public const string MobilePackageName = "com.capitech.floppyflight.mobile";
         public const string ProductName = "Floppy Flight";
         public const string CompanyName = "Capitech AB";
         public const string DefaultVersion = "1.0.0";
+        public const string MobileDefine = "FLOPPY_MOBILE";
+        const string TargetPref = "FloppyFlight.Target";
         const string OpenXrLoader = "UnityEngine.XR.OpenXR.OpenXRLoader";
         const string MetaXrFeatureSetId = "com.meta.openxr.featureset.metaxr";
         const string MetaXrFeatureId = "com.meta.openxr.feature.metaxr";
 
         static int s_bootstrapRetries;
+        static bool s_buildInProgress;
 
         [InitializeOnLoadMethod]
         static void Bootstrap()
@@ -44,6 +49,10 @@ namespace FloppyFlight.Editor
 
         static void ApplyWhenReady()
         {
+            // Batch mode applies the target inside BuildRelease, after assemblies are locked.
+            // Setting FLOPPY_MOBILE from this delay call domain-reloads and drops -executeMethod.
+            if (s_buildInProgress || Application.isBatchMode)
+                return;
             if ((EditorApplication.isCompiling || EditorApplication.isUpdating) && s_bootstrapRetries < 5)
             {
                 s_bootstrapRetries++;
@@ -53,13 +62,38 @@ namespace FloppyFlight.Editor
 
             try
             {
-                ApplyPlayerSettings(DefaultVersion, Math.Max(1, PlayerSettings.Android.bundleVersionCode));
+                var mobile = WantsMobileOnLoad();
+                var code = Math.Max(1, PlayerSettings.Android.bundleVersionCode);
+                if (mobile)
+                    ApplyMobilePlayerSettings(DefaultVersion, code);
+                else
+                    ApplyPlayerSettings(DefaultVersion, code);
+                QuestSceneSetup.PreferMobile = mobile;
                 QuestSceneSetup.EnsureMainScene();
             }
             catch (Exception ex)
             {
                 Debug.LogWarning("[FloppyFlight] Project setup deferred until packages finish importing: " + ex.Message);
             }
+        }
+
+        static bool WantsMobileOnLoad()
+        {
+            if (CommandLineRequestsMobile()) return true;
+            if (Application.isBatchMode) return false;
+            return EditorPrefs.GetString(TargetPref, "quest") == "mobile";
+        }
+
+        static bool CommandLineRequestsMobile()
+        {
+            var args = Environment.GetCommandLineArgs();
+            for (var i = 0; i < args.Length - 1; i++)
+            {
+                if (string.Equals(args[i], "-floppyTarget", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(args[i + 1], "mobile", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
         }
 
         [MenuItem("Floppy Flight/Configure Quest Player Settings")]
@@ -71,25 +105,90 @@ namespace FloppyFlight.Editor
             Debug.Log("[FloppyFlight] Quest player settings and OpenXR loader are configured.");
         }
 
+        [MenuItem("Floppy Flight/Switch Target/Quest")]
+        public static void SwitchToQuest()
+        {
+            EditorPrefs.SetString(TargetPref, "quest");
+            WriteTargetMarker(false);
+            ApplyPlayerSettings(DefaultVersion, Math.Max(1, PlayerSettings.Android.bundleVersionCode));
+            ConfigureOpenXr();
+            QuestSceneSetup.PreferMobile = false;
+            QuestSceneSetup.EnsureMainScene();
+            AssetDatabase.SaveAssets();
+            Debug.Log("[FloppyFlight] Target is Quest. Package " + PackageName + ", landscape, OpenXR on. Enter Play mode after the scripts finish compiling.");
+        }
+
+        [MenuItem("Floppy Flight/Switch Target/Mobile")]
+        public static void SwitchToMobile()
+        {
+            EditorPrefs.SetString(TargetPref, "mobile");
+            WriteTargetMarker(true);
+            ApplyMobilePlayerSettings(DefaultVersion, Math.Max(1, PlayerSettings.Android.bundleVersionCode));
+            DisableMobileXr();
+            QuestSceneSetup.PreferMobile = true;
+            QuestSceneSetup.EnsureMainScene();
+            AssetDatabase.SaveAssets();
+            Debug.Log("[FloppyFlight] Target is mobile. Package " + MobilePackageName + ", portrait, XR off. Enter Play mode after the scripts finish compiling.");
+        }
+
         [MenuItem("Floppy Flight/Build Signed Release APK")]
         public static void BuildAndroidApk()
         {
-            RunBuild(false);
+            RunBuild(false, false);
         }
 
         [MenuItem("Floppy Flight/Build Signed Release AAB")]
         public static void BuildAndroidAab()
         {
-            RunBuild(true);
+            RunBuild(true, false);
         }
 
-        static void RunBuild(bool appBundle)
+        [MenuItem("Floppy Flight/Build Mobile APK")]
+        public static void BuildMobileApk()
+        {
+            RunBuild(false, true);
+        }
+
+        [MenuItem("Floppy Flight/Build Mobile AAB")]
+        public static void BuildMobileAab()
+        {
+            RunBuild(true, true);
+        }
+
+        /// <summary>
+        /// Headless entry for CI. Produces a signed APK and a signed AAB.
+        /// Unity 6 Build Profiles are not used: game-ci calls this method, and a
+        /// profile would be a second source of package name, SDK, and XR state.
+        /// FLOPPY_MOBILE plus Library/FloppyFlightTarget.txt is the switch.
+        /// </summary>
+        public static void BuildMobilePackages()
         {
             var batch = Application.isBatchMode;
-            var label = appBundle ? "AAB" : "APK";
             try
             {
-                var output = BuildRelease(appBundle);
+                var apk = BuildRelease(false, true);
+                var aab = BuildRelease(true, true);
+                Debug.Log("[FloppyFlight] Mobile APK: " + apk);
+                Debug.Log("[FloppyFlight] Mobile AAB: " + aab);
+                if (batch) EditorApplication.Exit(0);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError("[FloppyFlight] Mobile release build failed: " + ex);
+                if (batch)
+                    EditorApplication.Exit(1);
+                else
+                    EditorUtility.DisplayDialog("Floppy Flight mobile build failed", ex.Message, "OK");
+            }
+        }
+
+        static void RunBuild(bool appBundle, bool mobile)
+        {
+            var batch = Application.isBatchMode;
+            var label = (mobile ? "Mobile " : "Quest ") + (appBundle ? "AAB" : "APK");
+            try
+            {
+                var output = BuildRelease(appBundle, mobile);
                 Debug.Log("[FloppyFlight] Signed release " + label + ": " + output);
                 if (batch) EditorApplication.Exit(0);
             }
@@ -103,19 +202,46 @@ namespace FloppyFlight.Editor
             }
         }
 
-        static string BuildRelease(bool appBundle)
+        static string BuildRelease(bool appBundle, bool mobile)
         {
+            s_buildInProgress = true;
             var args = ParseArgs();
             var version = GetOpt(args, "buildVersion", "APP_VERSION") ?? DefaultVersion;
             if (string.Equals(version, "none", StringComparison.OrdinalIgnoreCase))
                 version = DefaultVersion;
 
             var versionCode = DefaultVersionCode(args);
-            ApplyPlayerSettings(version, versionCode);
-            SwitchToAndroid();
-            ConfigureOpenXr();
-            ApplyAppId(args);
-            QuestSceneSetup.EnsureMainScene();
+            EditorApplication.LockReloadAssemblies();
+            try
+            {
+                if (mobile)
+                    ApplyMobilePlayerSettings(version, versionCode);
+                else
+                    ApplyPlayerSettings(version, versionCode);
+                SwitchToAndroid();
+                if (mobile)
+                    DisableMobileXr();
+                else
+                {
+                    ConfigureOpenXr();
+                    ApplyAppId(args);
+                }
+
+                QuestSceneSetup.PreferMobile = mobile;
+                QuestSceneSetup.EnsureMainScene();
+                return BuildSignedPlayer(args, appBundle);
+            }
+            finally
+            {
+                // Batch mode exits after the build. Unlocking here would domain-reload
+                // over the Exit call when FLOPPY_MOBILE was just added.
+                if (!Application.isBatchMode)
+                    EditorApplication.UnlockReloadAssemblies();
+            }
+        }
+
+        static string BuildSignedPlayer(Dictionary<string, string> args, bool appBundle)
+        {
 
             var keystore = ResolveKeystore(args);
             var keystorePass = RequireSecret(args, "androidKeystorePass", "ANDROID_KEYSTORE_PASS", "keystore password");
@@ -178,46 +304,201 @@ namespace FloppyFlight.Editor
 
         public static void ApplyPlayerSettings(string version, int versionCode)
         {
+            ApplySharedPlayerSettings(version, versionCode, PackageName);
+            EditorPrefs.SetString(TargetPref, "quest");
+            WriteTargetMarker(false);
+            SetMobileDefine(false);
+            PlayerSettings.defaultInterfaceOrientation = UIOrientation.LandscapeLeft;
+            PlayerSettings.allowedAutorotateToPortrait = false;
+            PlayerSettings.allowedAutorotateToPortraitUpsideDown = false;
+            PlayerSettings.allowedAutorotateToLandscapeLeft = true;
+            PlayerSettings.allowedAutorotateToLandscapeRight = true;
+            PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel32;
+            PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevel34;
+            PlayerSettings.Android.forceInternetPermission = true;
+            PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.Android, false);
+            PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, new[] { GraphicsDeviceType.Vulkan });
+            Debug.Log("[FloppyFlight] Quest player: " + PackageName + ", landscape, API 32/34, Vulkan.");
+        }
+
+        public static void ApplyMobilePlayerSettings(string version, int versionCode)
+        {
+            ApplySharedPlayerSettings(version, versionCode, MobilePackageName);
+            EditorPrefs.SetString(TargetPref, "mobile");
+            WriteTargetMarker(true);
+            SetMobileDefine(true);
+            PlayerSettings.defaultInterfaceOrientation = UIOrientation.Portrait;
+            PlayerSettings.allowedAutorotateToPortrait = false;
+            PlayerSettings.allowedAutorotateToPortraitUpsideDown = false;
+            PlayerSettings.allowedAutorotateToLandscapeLeft = false;
+            PlayerSettings.allowedAutorotateToLandscapeRight = false;
+            PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel24;
+            PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevel35;
+            PlayerSettings.Android.forceInternetPermission = false;
+            PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.Android, false);
+            PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, new[]
+            {
+                GraphicsDeviceType.OpenGLES3,
+                GraphicsDeviceType.Vulkan
+            });
+            Debug.Log("[FloppyFlight] Mobile player: " + MobilePackageName + ", portrait, API 24/35, GLES3+Vulkan, XR off.");
+        }
+
+        static void ApplySharedPlayerSettings(string version, int versionCode, string packageName)
+        {
             var android = NamedBuildTarget.Android;
             PlayerSettings.companyName = CompanyName;
             PlayerSettings.productName = ProductName;
             PlayerSettings.bundleVersion = version;
-            PlayerSettings.SetApplicationIdentifier(android, PackageName);
+            PlayerSettings.SetApplicationIdentifier(android, packageName);
             PlayerSettings.Android.bundleVersionCode = Math.Max(1, versionCode);
             Debug.Log("[FloppyFlight] Android versionName " + version + ", versionCode " + PlayerSettings.Android.bundleVersionCode + ".");
             PlayerSettings.colorSpace = ColorSpace.Linear;
             PlayerSettings.MTRendering = true;
             PlayerSettings.stripEngineCode = false;
             PlayerSettings.SetMobileMTRendering(android, true);
-            PlayerSettings.defaultInterfaceOrientation = UIOrientation.LandscapeLeft;
-            PlayerSettings.allowedAutorotateToPortrait = false;
-            PlayerSettings.allowedAutorotateToPortraitUpsideDown = false;
-            PlayerSettings.allowedAutorotateToLandscapeLeft = true;
-            PlayerSettings.allowedAutorotateToLandscapeRight = true;
-
             PlayerSettings.SetScriptingBackend(android, ScriptingImplementation.IL2CPP);
             PlayerSettings.SetApiCompatibilityLevel(android, ApiCompatibilityLevel.NET_Standard);
             PlayerSettings.SetManagedStrippingLevel(android, ManagedStrippingLevel.Low);
             PlayerSettings.SetIl2CppCompilerConfiguration(android, Il2CppCompilerConfiguration.Release);
-
-            PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel32;
-            PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevel34;
-            // One arm64 APK. No per-ABI splits and no OBB expansion file.
+            // One arm64 package. No per-ABI splits and no OBB expansion file.
             PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
             PlayerSettings.Android.splitApplicationBinary = false;
             PlayerSettings.Android.preferredInstallLocation = AndroidPreferredInstallLocation.Auto;
-            PlayerSettings.Android.forceInternetPermission = true;
             PlayerSettings.Android.forceSDCardPermission = false;
             PlayerSettings.Android.androidTVCompatibility = false;
             // Unity 6 OpenXR validation requires exactly Game Activity, not Activity.
             PlayerSettings.Android.applicationEntry = AndroidApplicationEntry.GameActivity;
-
-            PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.Android, false);
-            PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, new[] { GraphicsDeviceType.Vulkan });
             EnsureInputSystemOnly();
-
             QualitySettings.vSyncCount = 0;
             QualitySettings.antiAliasing = 4;
+        }
+
+        static void SetMobileDefine(bool mobile)
+        {
+            var android = NamedBuildTarget.Android;
+            var current = PlayerSettings.GetScriptingDefineSymbols(android) ?? string.Empty;
+            var parts = new List<string>();
+            var tokens = current.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+            for (var i = 0; i < tokens.Length; i++)
+            {
+                var token = tokens[i].Trim();
+                if (token.Length == 0 || token == MobileDefine)
+                    continue;
+                parts.Add(token);
+            }
+            if (mobile)
+                parts.Add(MobileDefine);
+            var desired = string.Join(";", parts);
+            if (string.Equals(NormalizeDefines(current), desired, StringComparison.Ordinal))
+                return;
+            PlayerSettings.SetScriptingDefineSymbols(android, desired);
+        }
+
+        static string NormalizeDefines(string value)
+        {
+            var parts = new List<string>();
+            var tokens = (value ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+            for (var i = 0; i < tokens.Length; i++)
+            {
+                var token = tokens[i].Trim();
+                if (token.Length > 0)
+                    parts.Add(token);
+            }
+            return string.Join(";", parts);
+        }
+
+        public static bool IsMobilePlayerBuild()
+        {
+            var marker = TargetMarkerPath();
+            if (File.Exists(marker))
+            {
+                var text = File.ReadAllText(marker).Trim();
+                if (text == "mobile") return true;
+                if (text == "quest") return false;
+            }
+
+            var defines = PlayerSettings.GetScriptingDefineSymbols(NamedBuildTarget.Android) ?? string.Empty;
+            return defines.IndexOf(MobileDefine, StringComparison.Ordinal) >= 0;
+        }
+
+        static void WriteTargetMarker(bool mobile)
+        {
+            var path = TargetMarkerPath();
+            Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
+            File.WriteAllText(path, mobile ? "mobile" : "quest");
+        }
+
+        static string TargetMarkerPath()
+        {
+            return Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Library", "FloppyFlightTarget.txt"));
+        }
+
+        static void DisableMobileXr()
+        {
+            var group = BuildTargetGroup.Android;
+            var perTarget = GetOrCreateXrSettings();
+            if (perTarget.HasSettingsForBuildTarget(group))
+            {
+                var general = perTarget.SettingsForBuildTarget(group);
+                general.InitManagerOnStart = false;
+                EditorUtility.SetDirty(general);
+                RemoveAssignedLoaders(general.Manager, group);
+            }
+
+            DisableOpenXrFeature(group, MetaXrFeatureSetId, true);
+            DisableOpenXrFeature(group, MetaXrFeatureId, false);
+            DisableOpenXrFeature(group, MetaQuestFeature.featureId, false);
+            foreach (var id in InteractionProfileIds)
+                DisableOpenXrFeature(group, id, false);
+
+            AssetDatabase.SaveAssets();
+            Debug.Log("[FloppyFlight] Mobile: Android XR loader startup is off and Meta/OpenXR features are disabled.");
+        }
+
+        static void RemoveAssignedLoaders(XRManagerSettings manager, BuildTargetGroup group)
+        {
+            if (manager == null || manager.activeLoaders == null)
+                return;
+
+            var names = new List<string>();
+            foreach (var loader in manager.activeLoaders)
+            {
+                if (loader != null)
+                    names.Add(loader.GetType().FullName);
+            }
+
+            for (var i = 0; i < names.Count; i++)
+            {
+                if (!XRPackageMetadataStore.RemoveLoader(manager, names[i], group))
+                    Debug.LogWarning("[FloppyFlight] Could not remove XR loader " + names[i] + ".");
+            }
+        }
+
+        static void DisableOpenXrFeature(BuildTargetGroup group, string id, bool featureSet)
+        {
+            try
+            {
+                if (featureSet)
+                {
+                    var set = OpenXRFeatureSetManager.GetFeatureSetWithId(group, id);
+                    if (set == null)
+                        return;
+                    set.isEnabled = false;
+                    OpenXRFeatureSetManager.SetFeaturesFromEnabledFeatureSets(group);
+                    return;
+                }
+
+                var feature = FeatureHelpers.GetFeatureWithIdForBuildTarget(group, id);
+                if (feature == null)
+                    return;
+                feature.enabled = false;
+                EditorUtility.SetDirty(feature);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[FloppyFlight] Could not disable OpenXR feature " + id + ": " + ex.Message);
+            }
         }
 
         static void EnsureInputSystemOnly()
@@ -719,6 +1000,12 @@ namespace FloppyFlight.Editor
 
         public void OnPostGenerateGradleAndroidProject(string path)
         {
+            if (BuildScript.IsMobilePlayerBuild())
+            {
+                StripMobileXr(path);
+                return;
+            }
+
             var unityLibrary = ResolveUnityLibrary(path);
             var gradleRoot = ResolveGradleRoot(path, unityLibrary);
             var removed = StripUnityLoaderBesideOvrPlugin(unityLibrary);
@@ -732,6 +1019,459 @@ namespace FloppyFlight.Editor
                 + (patched ? " and added launcher jniLibs.pickFirsts." : ". Launcher pickFirst was already present.")
                 + " OVRPlugin keeps the loader Quest runs. Removed " + strippedLibs
                 + " non-arm64 native libraries. com.oculus.supportedDevices is " + SupportedDevicesValue + ".");
+        }
+
+        static void StripMobileXr(string path)
+        {
+            var unityLibrary = ResolveUnityLibrary(path);
+            var gradleRoot = ResolveGradleRoot(path, unityLibrary);
+            var root = !string.IsNullOrEmpty(gradleRoot) && Directory.Exists(gradleRoot)
+                ? gradleRoot
+                : unityLibrary;
+            if (string.IsNullOrEmpty(root) || !Directory.Exists(root))
+            {
+                throw new InvalidOperationException(
+                    "Mobile build could not find the generated Gradle project, so XR packaging could not be removed.");
+            }
+
+            var removedAars = 0;
+            foreach (var aar in Directory.GetFiles(root, "openxr_loader.aar", SearchOption.AllDirectories))
+            {
+                ClearReadOnly(aar);
+                File.Delete(aar);
+                removedAars++;
+            }
+
+            var removedSo = 0;
+            foreach (var so in Directory.GetFiles(root, LoaderSo, SearchOption.AllDirectories))
+            {
+                ClearReadOnly(so);
+                File.Delete(so);
+                removedSo++;
+            }
+
+            var strippedArchives = 0;
+            var cleanedManifests = 0;
+            foreach (var archive in FindArchives(root))
+            {
+                strippedArchives += RemoveLoaderFromAar(archive);
+                cleanedManifests += StripXrFromArchive(archive);
+            }
+
+            var cleanedFiles = 0;
+            foreach (var manifest in Directory.GetFiles(root, "AndroidManifest.xml", SearchOption.AllDirectories))
+            {
+                if (StripXrFromManifest(manifest))
+                    cleanedFiles++;
+            }
+
+            InjectMobileXrRemovals(unityLibrary);
+            VerifyMobileHasNoXr(root);
+            Debug.Log(
+                "[FloppyFlight] Mobile packaging removed XR. Deleted " + removedAars
+                + " openxr_loader.aar and " + removedSo + " loose " + LoaderSo
+                + " files, stripped loader entries from " + strippedArchives
+                + " archives, cleaned " + cleanedManifests + " archive manifests and "
+                + cleanedFiles + " project manifests. No VR intent category, com.oculus.supportedDevices, or "
+                + LoaderSo + " remains.");
+        }
+
+        static bool StripXrFromManifest(string path)
+        {
+            var doc = LoadManifest(path);
+            if (!RemoveXrNodes(doc))
+                return false;
+            SaveManifest(doc, path);
+            return true;
+        }
+
+        static int StripXrFromArchive(string archivePath)
+        {
+            var changed = false;
+            var temp = archivePath + ".floppyflight-tmp";
+            using (var inputStream = File.OpenRead(archivePath))
+            using (var input = new ZipArchive(inputStream, ZipArchiveMode.Read))
+            {
+                foreach (var entry in input.Entries)
+                {
+                    var name = NormalizeZipName(entry.FullName);
+                    if (string.IsNullOrEmpty(entry.Name) || !IsAndroidManifestEntry(name))
+                        continue;
+                    if (ManifestBytesHaveXr(ReadEntryBytes(entry)))
+                    {
+                        changed = true;
+                        break;
+                    }
+                }
+
+                if (!changed)
+                    return 0;
+
+                try
+                {
+                    using (var outputStream = File.Create(temp))
+                    using (var output = new ZipArchive(outputStream, ZipArchiveMode.Create))
+                    {
+                        foreach (var entry in input.Entries)
+                        {
+                            var name = NormalizeZipName(entry.FullName);
+                            if (!string.IsNullOrEmpty(entry.Name) && IsAndroidManifestEntry(name))
+                            {
+                                var cleaned = RemoveXrManifestBytes(ReadEntryBytes(entry));
+                                WriteBytesEntry(output, entry, cleaned);
+                                continue;
+                            }
+
+                            if (string.IsNullOrEmpty(entry.Name))
+                            {
+                                output.CreateEntry(entry.FullName);
+                                continue;
+                            }
+
+                            CopyZipEntry(output, entry);
+                        }
+                    }
+                }
+                catch
+                {
+                    if (File.Exists(temp))
+                        File.Delete(temp);
+                    throw;
+                }
+            }
+
+            ReplaceGeneratedFile(archivePath, temp);
+            return 1;
+        }
+
+        static bool ManifestBytesHaveXr(byte[] xml)
+        {
+            try
+            {
+                var doc = new XmlDocument();
+                using (var stream = new MemoryStream(xml, false))
+                    doc.Load(stream);
+                return FindXrNodes(doc).Count > 0;
+            }
+            catch (XmlException)
+            {
+                return BinaryContainsXr(xml);
+            }
+        }
+
+        static byte[] RemoveXrManifestBytes(byte[] xml)
+        {
+            try
+            {
+                var doc = new XmlDocument();
+                using (var stream = new MemoryStream(xml, false))
+                    doc.Load(stream);
+                if (!RemoveXrNodes(doc))
+                    return xml;
+                using (var memory = new MemoryStream())
+                {
+                    var settings = ManifestWriterSettings();
+                    settings.CloseOutput = false;
+                    using (var writer = XmlWriter.Create(memory, settings))
+                        doc.Save(writer);
+                    return memory.ToArray();
+                }
+            }
+            catch (XmlException)
+            {
+                // AAR manifests are often binary Android XML. The string pool is still
+                // contiguous UTF-8 or UTF-16, so same-length rewrites keep the offsets valid.
+                var neutered = NeuterBinaryXrMarkers(xml);
+                if (BinaryContainsXr(neutered))
+                {
+                    throw new InvalidOperationException(
+                        "A binary AndroidManifest still declares Quest or OpenXR entries after the marker rewrite.");
+                }
+                return neutered;
+            }
+        }
+
+        static readonly string[][] XrTokenRewrites =
+        {
+            new[] { "oculus", "oculux" },
+            new[] { "Oculus", "Oculux" },
+            new[] { "OCULUS", "OCULUX" },
+            new[] { "openxr", "openxs" },
+            new[] { "OpenXR", "OpenXS" },
+            new[] { "OPENXR", "OPENXS" },
+            new[] { "supportedDevices", "supportedDevicex" },
+            new[] { "IMMERSIVE_XR", "IMMERSIVE_XX" },
+            new[] { "vr.headtracking", "xx.headtracking" },
+            new[] { "vr.mode", "xx.mode" },
+            new[] { "vr.application", "xx.application" },
+            new[] { "com.unity.xr", "com.unity.xx" }
+        };
+
+        static readonly string[] XrBinaryMarkers =
+        {
+            "com.oculus.supportedDevices",
+            "com.oculus.intent.category.VR",
+            "org.khronos.openxr",
+            "android.hardware.vr.headtracking",
+            "com.unity.xr",
+            "IMMERSIVE_XR"
+        };
+
+        static byte[] NeuterBinaryXrMarkers(byte[] data)
+        {
+            var current = data;
+            for (var i = 0; i < XrTokenRewrites.Length; i++)
+            {
+                var from = XrTokenRewrites[i][0];
+                var to = XrTokenRewrites[i][1];
+                current = ReplaceEncoded(current, from, to, Encoding.UTF8);
+                current = ReplaceEncoded(current, from, to, Encoding.Unicode);
+            }
+            return current;
+        }
+
+        static byte[] ReplaceEncoded(byte[] data, string from, string to, Encoding encoding)
+        {
+            var pattern = encoding.GetBytes(from);
+            var replacement = encoding.GetBytes(to);
+            if (pattern.Length == 0 || pattern.Length != replacement.Length)
+                return data;
+            var index = IndexOfBytes(data, pattern, 0);
+            if (index < 0)
+                return data;
+            var copy = (byte[])data.Clone();
+            while (index >= 0)
+            {
+                Buffer.BlockCopy(replacement, 0, copy, index, replacement.Length);
+                index = IndexOfBytes(copy, pattern, index + pattern.Length);
+            }
+            return copy;
+        }
+
+        static bool BinaryContainsXr(byte[] data)
+        {
+            if (data == null || data.Length == 0)
+                return false;
+            for (var i = 0; i < XrBinaryMarkers.Length; i++)
+            {
+                var marker = XrBinaryMarkers[i];
+                if (IndexOfBytes(data, Encoding.UTF8.GetBytes(marker), 0) >= 0)
+                    return true;
+                if (IndexOfBytes(data, Encoding.Unicode.GetBytes(marker), 0) >= 0)
+                    return true;
+            }
+            return false;
+        }
+
+        static int IndexOfBytes(byte[] data, byte[] pattern, int start)
+        {
+            if (data == null || pattern == null || pattern.Length == 0 || start < 0)
+                return -1;
+            var last = data.Length - pattern.Length;
+            for (var i = start; i <= last; i++)
+            {
+                var matched = true;
+                for (var j = 0; j < pattern.Length; j++)
+                {
+                    if (data[i + j] != pattern[j])
+                    {
+                        matched = false;
+                        break;
+                    }
+                }
+                if (matched)
+                    return i;
+            }
+            return -1;
+        }
+
+        static void InjectMobileXrRemovals(string unityLibrary)
+        {
+            if (string.IsNullOrEmpty(unityLibrary))
+                return;
+            var main = Path.Combine(unityLibrary, "src", "main", "AndroidManifest.xml");
+            if (!File.Exists(main))
+            {
+                throw new InvalidOperationException(
+                    "Mobile build could not find " + main + " to add VR manifest removal rules.");
+            }
+
+            var doc = LoadManifest(main);
+            var manifest = doc.DocumentElement;
+            if (manifest == null || !string.Equals(manifest.LocalName, "manifest", StringComparison.Ordinal))
+                throw new InvalidOperationException(main + " has no manifest root.");
+            if (string.IsNullOrEmpty(manifest.GetAttribute("xmlns:tools")))
+                manifest.SetAttribute("xmlns:tools", ToolsNs);
+
+            EnsureRemoval(doc, manifest, "uses-feature", "android.hardware.vr.headtracking");
+            EnsureRemoval(doc, manifest, "uses-feature", "android.hardware.vr.high_performance");
+            EnsureRemoval(doc, manifest, "uses-feature", "android.software.vr.mode");
+            EnsureRemoval(doc, manifest, "uses-permission", "org.khronos.openxr.permission.OPENXR");
+            EnsureRemoval(doc, manifest, "uses-permission", "org.khronos.openxr.permission.OPENXR_SYSTEM");
+
+            var application = FindChildElement(manifest, "application");
+            if (application == null)
+                throw new InvalidOperationException(main + " has no application element.");
+            EnsureRemoval(doc, application, "meta-data", SupportedDevicesName);
+
+            var filters = doc.GetElementsByTagName("intent-filter");
+            foreach (XmlNode node in filters)
+            {
+                var filter = node as XmlElement;
+                if (filter == null)
+                    continue;
+                EnsureRemoval(doc, filter, "category", "com.oculus.intent.category.VR");
+                EnsureRemoval(doc, filter, "category", "org.khronos.openxr.intent.category.IMMERSIVE_XR");
+            }
+
+            SaveManifest(doc, main);
+        }
+
+        static void EnsureRemoval(XmlDocument doc, XmlElement parent, string localName, string androidName)
+        {
+            foreach (XmlNode child in parent.ChildNodes)
+            {
+                var element = child as XmlElement;
+                if (element == null || !string.Equals(element.LocalName, localName, StringComparison.Ordinal))
+                    continue;
+                if (!string.Equals(AndroidAttribute(element, "name"), androidName, StringComparison.Ordinal))
+                    continue;
+                element.SetAttribute("node", ToolsNs, "remove");
+                return;
+            }
+
+            var created = doc.CreateElement(localName);
+            created.SetAttribute("name", AndroidNs, androidName);
+            created.SetAttribute("node", ToolsNs, "remove");
+            parent.AppendChild(created);
+        }
+
+        static bool RemoveXrNodes(XmlDocument doc)
+        {
+            var nodes = FindXrNodes(doc);
+            if (nodes.Count == 0)
+                return false;
+            for (var i = 0; i < nodes.Count; i++)
+            {
+                if (nodes[i].ParentNode != null)
+                    nodes[i].ParentNode.RemoveChild(nodes[i]);
+            }
+            return true;
+        }
+
+        static List<XmlElement> FindXrNodes(XmlDocument doc)
+        {
+            var found = new List<XmlElement>();
+            var nodes = doc.GetElementsByTagName("*");
+            foreach (XmlNode node in nodes)
+            {
+                var element = node as XmlElement;
+                if (element != null && IsMobileXrNode(element))
+                    found.Add(element);
+            }
+            return found;
+        }
+
+        static bool IsMobileXrNode(XmlElement element)
+        {
+            if (string.Equals(ToolsAttribute(element, "node"), "remove", StringComparison.OrdinalIgnoreCase))
+                return false;
+            var local = element.LocalName;
+            var name = AndroidAttribute(element, "name") ?? string.Empty;
+            if (string.Equals(local, "category", StringComparison.Ordinal))
+                return IsVrCategoryName(name);
+            if (string.Equals(local, "meta-data", StringComparison.Ordinal)
+                || string.Equals(local, "uses-feature", StringComparison.Ordinal)
+                || string.Equals(local, "uses-permission", StringComparison.Ordinal))
+                return IsXrComponentName(name);
+            return false;
+        }
+
+        static bool IsVrCategoryName(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+                return false;
+            if (name.IndexOf("LAUNCHER", StringComparison.Ordinal) >= 0)
+                return false;
+            if (name.IndexOf("oculus", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+            if (name.IndexOf("openxr", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+            if (name.IndexOf("IMMERSIVE_XR", StringComparison.Ordinal) >= 0)
+                return true;
+            return name.EndsWith(".VR", StringComparison.Ordinal);
+        }
+
+        static bool IsXrComponentName(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+                return false;
+            var lower = name.ToLowerInvariant();
+            return lower.Contains("oculus")
+                || lower.Contains("openxr")
+                || lower.Contains("com.unity.xr")
+                || lower.Contains("supporteddevices")
+                || lower.Contains("vr.headtracking")
+                || lower.Contains("vr.mode")
+                || lower.Contains("vr.application");
+        }
+
+        static void VerifyMobileHasNoXr(string root)
+        {
+            foreach (var so in Directory.GetFiles(root, LoaderSo, SearchOption.AllDirectories))
+            {
+                throw new InvalidOperationException("Mobile build still contains " + so + ".");
+            }
+
+            foreach (var manifest in Directory.GetFiles(root, "AndroidManifest.xml", SearchOption.AllDirectories))
+            {
+                var nodes = FindXrNodes(LoadManifest(manifest));
+                if (nodes.Count > 0)
+                {
+                    throw new InvalidOperationException(
+                        manifest + " still declares " + nodes.Count + " Quest/OpenXR manifest entries.");
+                }
+            }
+
+            foreach (var archive in FindArchives(root))
+            {
+                if (ArchiveContainsLoader(archive) || ArchiveContainsXrManifest(archive))
+                {
+                    throw new InvalidOperationException(
+                        archive + " still contains " + LoaderSo + " or a Quest/OpenXR manifest entry.");
+                }
+            }
+        }
+
+        static bool ArchiveContainsLoader(string archivePath)
+        {
+            using (var inputStream = File.OpenRead(archivePath))
+            using (var input = new ZipArchive(inputStream, ZipArchiveMode.Read))
+            {
+                foreach (var entry in input.Entries)
+                {
+                    if (IsOpenXrLoaderEntry(NormalizeZipName(entry.FullName)))
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        static bool ArchiveContainsXrManifest(string archivePath)
+        {
+            using (var inputStream = File.OpenRead(archivePath))
+            using (var input = new ZipArchive(inputStream, ZipArchiveMode.Read))
+            {
+                foreach (var entry in input.Entries)
+                {
+                    var name = NormalizeZipName(entry.FullName);
+                    if (string.IsNullOrEmpty(entry.Name) || !IsAndroidManifestEntry(name))
+                        continue;
+                    if (ManifestBytesHaveXr(ReadEntryBytes(entry)))
+                        return true;
+                }
+            }
+            return false;
         }
 
         static int StripUnityLoaderBesideOvrPlugin(string unityLibrary)
