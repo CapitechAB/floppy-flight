@@ -23,17 +23,39 @@ namespace FloppyFlight.Editor
     public static class QuestSceneSetup
     {
         public const string ScenePath = "Assets/Scenes/Main.unity";
+        public const string QuestMarker = "Platform_Quest";
+        public const string MobileMarker = "Platform_Mobile";
         const string BgmPath = "Assets/Audio/FloppyFlight_BGM.mp3";
+        const string TargetPref = "FloppyFlight.Target";
+
+        /// <summary>
+        /// Set by the build script before generating the scene. Null follows the
+        /// command line and the editor target preference.
+        /// </summary>
+        public static bool? PreferMobile;
+
+        public static bool UseMobileRig()
+        {
+            if (PreferMobile.HasValue) return PreferMobile.Value;
+            if (CommandLineRequestsMobile()) return true;
+            if (!Application.isBatchMode && EditorPrefs.GetString(TargetPref, "quest") == "mobile")
+                return true;
+            return false;
+        }
 
         public static void EnsureMainScene()
         {
             EnsureFolders();
+            var mobile = UseMobileRig();
             var birdPrefab = BirdPrefabSetup.EnsurePrefab();
             var purplePrefab = BirdPrefabSetup.EnsurePurplePrefab();
-            if (File.Exists(Path.Combine(Application.dataPath, "Scenes/Main.unity")))
+            var sceneFile = Path.Combine(Application.dataPath, "Scenes/Main.unity");
+            if (File.Exists(sceneFile))
             {
+                var sceneText = File.ReadAllText(sceneFile);
+                var marker = mobile ? MobileMarker : QuestMarker;
                 var existing = AssetDatabase.LoadAssetAtPath<SceneAsset>(ScenePath);
-                if (existing != null)
+                if (existing != null && sceneText.Contains(marker))
                 {
                     EnsureBirdSpawner(birdPrefab, purplePrefab);
                     EditorBuildSettings.scenes = new[]
@@ -48,9 +70,13 @@ namespace FloppyFlight.Editor
             var materials = CreateMaterials();
             CreateEnvironment(materials);
             var pipePrefab = CreatePipePrefab(materials);
-            var flight = CreateFlightRig(materials);
+            var flight = mobile ? CreateMobileFlightRig(materials) : CreateFlightRig(materials);
             CreateGameSystems(flight, pipePrefab, birdPrefab, purplePrefab);
-            CreateHud(flight.transform);
+            if (mobile)
+                CreateMobileUi();
+            else
+                CreateHud(flight.transform);
+            new GameObject(mobile ? MobileMarker : QuestMarker);
 
             EditorSceneManager.SaveScene(scene, ScenePath);
             EditorBuildSettings.scenes = new[]
@@ -58,7 +84,19 @@ namespace FloppyFlight.Editor
                 new EditorBuildSettingsScene(ScenePath, true)
             };
             AssetDatabase.SaveAssets();
-            Debug.Log("[FloppyFlight] Created " + ScenePath);
+            Debug.Log("[FloppyFlight] Created " + ScenePath + (mobile ? " (mobile portrait)." : " (Quest)."));
+        }
+
+        static bool CommandLineRequestsMobile()
+        {
+            var args = Environment.GetCommandLineArgs();
+            for (var i = 0; i < args.Length - 1; i++)
+            {
+                if (string.Equals(args[i], "-floppyTarget", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(args[i + 1], "mobile", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
         }
 
         static void EnsureFolders()
@@ -401,6 +439,7 @@ namespace FloppyFlight.Editor
             rigObject.transform.position = new Vector3(0f, 5f, 0f);
 
             var flight = rigObject.AddComponent<FlapFlightController>();
+            var flapInput = rigObject.AddComponent<QuestArmFlapInput>();
             var avatar = rigObject.AddComponent<BirdAvatarController>();
 
             var rigType = FindType("OVRCameraRig");
@@ -456,6 +495,7 @@ namespace FloppyFlight.Editor
             hit.AddComponent<FlightCollision>();
 
             var flightSo = new SerializedObject(flight);
+            SetRef(flightSo, "flapSource", flapInput);
             SetRef(flightSo, "leftWingTransform", leftWing.transform);
             SetRef(flightSo, "rightWingTransform", rightWing.transform);
             SetRef(flightSo, "birdBeakTransform", beak.transform);
@@ -471,6 +511,79 @@ namespace FloppyFlight.Editor
             avatarSo.ApplyModifiedPropertiesWithoutUndo();
 
             return rigObject;
+        }
+
+        static GameObject CreateMobileFlightRig(Materials materials)
+        {
+            var rigObject = new GameObject("FlightRig");
+            // Same lane direction as Quest: local +Z becomes world -Z.
+            rigObject.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+            rigObject.transform.position = new Vector3(0f, 5f, 0f);
+
+            var flight = rigObject.AddComponent<FlapFlightController>();
+            var flapInput = rigObject.AddComponent<TouchFlapInput>();
+            var avatar = rigObject.AddComponent<BirdAvatarController>();
+
+            var cameraObject = new GameObject("MobileCamera");
+            cameraObject.transform.SetParent(rigObject.transform, false);
+            cameraObject.transform.localPosition = new Vector3(0f, 0.15f, -0.35f);
+            cameraObject.transform.localRotation = Quaternion.Euler(8f, 0f, 0f);
+            var camera = cameraObject.AddComponent<Camera>();
+            // 96° vertical is about 60° horizontal on a tall phone, so the lane and
+            // the first pipe (about 18 m ahead, 2.3 m wide) stay readable in portrait.
+            camera.fieldOfView = 96f;
+            camera.nearClipPlane = 0.05f;
+            camera.farClipPlane = 350f;
+            camera.stereoTargetEye = StereoTargetEyeMask.None;
+            camera.clearFlags = CameraClearFlags.Skybox;
+            cameraObject.AddComponent<AudioListener>();
+
+            var beak = CreateBeak(materials);
+            beak.transform.SetParent(cameraObject.transform, false);
+            beak.transform.localPosition = new Vector3(0f, -0.42f, 1.05f);
+            beak.transform.localRotation = Quaternion.Euler(12f, 0f, 0f);
+
+            var leftWing = CreateWing(materials, true);
+            leftWing.transform.SetParent(cameraObject.transform, false);
+            leftWing.transform.localPosition = new Vector3(-0.28f, -0.22f, 0.72f);
+            leftWing.transform.localScale = Vector3.one * 0.85f;
+            var rightWing = CreateWing(materials, false);
+            rightWing.transform.SetParent(cameraObject.transform, false);
+            rightWing.transform.localPosition = new Vector3(0.28f, -0.22f, 0.72f);
+            rightWing.transform.localScale = Vector3.one * 0.85f;
+
+            var hit = new GameObject("BodyCollider");
+            hit.transform.SetParent(rigObject.transform, false);
+            hit.transform.localPosition = new Vector3(0f, -0.05f, 0.45f);
+            var sphere = hit.AddComponent<SphereCollider>();
+            sphere.isTrigger = true;
+            sphere.radius = 0.22f;
+            var body = hit.AddComponent<Rigidbody>();
+            body.isKinematic = true;
+            body.useGravity = false;
+            hit.AddComponent<FlightCollision>();
+
+            var flightSo = new SerializedObject(flight);
+            SetRef(flightSo, "flapSource", flapInput);
+            SetRef(flightSo, "leftWingTransform", leftWing.transform);
+            SetRef(flightSo, "rightWingTransform", rightWing.transform);
+            SetRef(flightSo, "birdBeakTransform", beak.transform);
+            flightSo.ApplyModifiedPropertiesWithoutUndo();
+
+            var avatarSo = new SerializedObject(avatar);
+            SetRef(avatarSo, "leftControllerAnchor", leftWing.transform);
+            SetRef(avatarSo, "rightControllerAnchor", rightWing.transform);
+            SetRef(avatarSo, "leftWingMesh", leftWing.transform);
+            SetRef(avatarSo, "rightWingMesh", rightWing.transform);
+            SetRef(avatarSo, "centerEyeCamera", cameraObject.transform);
+            avatarSo.ApplyModifiedPropertiesWithoutUndo();
+            return rigObject;
+        }
+
+        static void CreateMobileUi()
+        {
+            var ui = new GameObject("MobileUi");
+            ui.AddComponent<MobileFlightUi>();
         }
 
         static GameObject CreateBeak(Materials materials)
