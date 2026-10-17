@@ -3,6 +3,7 @@ import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
 import { sound } from './audio.js';
 import { BirdAvatar } from './bird.js';
 import { PipeManager } from './pipes.js';
+import { EnemyBirdManager } from './enemyBirds.js';
 import { Environment } from './environment.js';
 import { UIManager } from './ui.js';
 
@@ -97,6 +98,7 @@ class FloppyFlightGame {
   initGameWorld() {
     this.avatar = new BirdAvatar(this.camera, this.controller0, this.controller1);
     this.pipeManager = new PipeManager(this.scene);
+    this.enemyBirds = new EnemyBirdManager(this.scene);
     this.environment = new Environment(this.scene);
     this.ui = new UIManager(this.scene, this.camera);
 
@@ -142,6 +144,7 @@ class FloppyFlightGame {
 
     this.playerRig.position.set(0, 5.0, 0);
     this.pipeManager.reset(-18);
+    this.enemyBirds.reset();
     this.ui.updateScore(0);
     this.ui.showReady(this.playerRig.position);
     this.ui.hideGameOver();
@@ -287,9 +290,19 @@ class FloppyFlightGame {
         this.ui.updateScore(this.score);
       });
 
-      // Collision check
+      this.enemyBirds.update(
+        delta,
+        this.playerRig.position.z,
+        this.forwardSpeed,
+        this.pipeManager
+      );
+
+      // Collision check. A bird uses the same game-over path as a pipe.
       const collision = this.pipeManager.checkCollision(this.playerRig.position);
-      if (collision.hit) {
+      const birdHit = collision.hit
+        ? collision
+        : this.enemyBirds.checkCollision(this.playerRig.position);
+      if (birdHit.hit) {
         this.handleGameOver();
       }
     } else if (this.state === 'GAMEOVER') {
