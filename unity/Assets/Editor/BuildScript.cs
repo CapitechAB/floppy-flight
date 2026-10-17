@@ -183,7 +183,8 @@ namespace FloppyFlight.Editor
             PlayerSettings.Android.forceInternetPermission = true;
             PlayerSettings.Android.forceSDCardPermission = false;
             PlayerSettings.Android.androidTVCompatibility = false;
-            PlayerSettings.Android.applicationEntry = AndroidApplicationEntry.Activity;
+            // Unity 6 OpenXR validation requires exactly Game Activity, not Activity.
+            PlayerSettings.Android.applicationEntry = AndroidApplicationEntry.GameActivity;
 
             PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.Android, false);
             PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, new[] { GraphicsDeviceType.Vulkan });
@@ -248,24 +249,51 @@ namespace FloppyFlight.Editor
 
             feature.enabled = true;
             // Manifest names from Unity's MetaQuestFeature.DeviceManifestName.
+            // OnEnable also inserts Quest 1 as enabled. Symmetric projection is an
+            // error while that device is enabled, so leave it off and drop Quest 1.
             feature.AddTargetDevice("quest2", "Quest 2", true);
             feature.AddTargetDevice("cambria", "Quest Pro", true);
             feature.AddTargetDevice("eureka", "Quest 3", true);
             feature.AddTargetDevice("quest3s", "Quest 3S", true);
-            SetInternal(feature, "symmetricProjection", true);
+            InvokeInstance(feature, "EnableTargetDevice", "quest", false);
+            SetInternal(feature, "symmetricProjection", false);
             SetInternal(feature, "optimizeBufferDiscards", true);
             EditorUtility.SetDirty(feature);
+            EnableInteractionProfiles(group);
 
             var openXr = OpenXRSettings.GetSettingsForBuildTargetGroup(group);
             if (openXr == null)
                 throw new InvalidOperationException("OpenXR Android settings asset was not created.");
             openXr.renderMode = OpenXRSettings.RenderMode.SinglePassInstanced;
-            openXr.symmetricProjection = true;
+            openXr.symmetricProjection = false;
             openXr.optimizeBufferDiscards = true;
+            openXr.latencyOptimization = OpenXRSettings.LatencyOptimization.PrioritizeInputPolling;
             EditorUtility.SetDirty(openXr);
             AssetDatabase.SaveAssets();
 
-            Debug.Log("[FloppyFlight] OpenXR Android loader enabled. Meta Quest Support targets Quest 2, Quest Pro, Quest 3, and Quest 3S. Stereo mode is Single Pass Instanced (Vulkan multiview) with symmetric projection.");
+            Debug.Log("[FloppyFlight] OpenXR Android loader enabled. Meta Quest Support targets Quest 2, Quest Pro, Quest 3, and Quest 3S. Stereo mode is Single Pass Instanced (Vulkan multiview). Oculus Touch, Touch Pro, and Touch Plus profiles are enabled. Symmetric projection is off. Latency optimization is Prioritize Input Polling.");
+        }
+
+        static readonly string[] InteractionProfileIds =
+        {
+            "com.unity.openxr.feature.input.oculustouch",
+            "com.unity.openxr.feature.input.metaquestpro",
+            "com.unity.openxr.feature.input.metaquestplus"
+        };
+
+        static void EnableInteractionProfiles(BuildTargetGroup group)
+        {
+            foreach (var id in InteractionProfileIds)
+            {
+                var profile = FeatureHelpers.GetFeatureWithIdForBuildTarget(group, id);
+                if (profile == null)
+                {
+                    throw new InvalidOperationException(
+                        "OpenXR interaction profile was not found: " + id + ". com.unity.xr.openxr 1.18.0 is required.");
+                }
+                profile.enabled = true;
+                EditorUtility.SetDirty(profile);
+            }
         }
 
         static XRGeneralSettingsPerBuildTarget GetOrCreateXrSettings()
@@ -287,6 +315,17 @@ namespace FloppyFlight.Editor
                 return;
             }
             property.SetValue(target, value);
+        }
+
+        static void InvokeInstance(object target, string methodName, params object[] args)
+        {
+            var method = target.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (method == null)
+            {
+                Debug.LogWarning("[FloppyFlight] Could not call " + target.GetType().Name + "." + methodName);
+                return;
+            }
+            method.Invoke(target, args);
         }
 
         static void ApplyAppId(Dictionary<string, string> args)
@@ -434,6 +473,67 @@ namespace FloppyFlight.Editor
                 }
             }
             return "See the Unity log for the first error.";
+        }
+    }
+
+    /// <summary>
+    /// Meta XR Core's DevAgent build processor injects the editor machine address and
+    /// an access token into RuntimeSettings for every build, including release.
+    /// Clear that connection after it runs so the values are not packed into the AAB.
+    /// </summary>
+    class StripDevAgentFromReleaseBuild : IPreprocessBuildWithReport
+    {
+        public int callbackOrder => 1000;
+
+        public void OnPreprocessBuild(BuildReport report)
+        {
+            if ((report.summary.options & BuildOptions.Development) != 0)
+                return;
+
+            var settingsType = FindDevAgentSettings();
+            if (settingsType == null)
+            {
+                Debug.Log("[FloppyFlight] DevAgent RuntimeSettings was not found. No dev-agent connection to strip.");
+                return;
+            }
+
+            var instance = settingsType.GetProperty("Instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
+                ?.GetValue(null);
+            if (instance == null)
+                return;
+
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            settingsType.GetProperty("Enabled", flags)?.SetValue(instance, false);
+            settingsType.GetProperty("ServerAddress", flags)?.SetValue(instance, string.Empty);
+            settingsType.GetMethod("SetAccessToken", flags)?.Invoke(instance, new object[] { string.Empty });
+            settingsType.GetProperty("WitClientAccessToken", flags)?.SetValue(instance, string.Empty);
+            if (instance is UnityEngine.Object asset)
+            {
+                EditorUtility.SetDirty(asset);
+                AssetDatabase.SaveAssets();
+            }
+
+            Debug.Log("[FloppyFlight] Release build: disabled DevAgent and cleared its server address and access token.");
+        }
+
+        static Type FindDevAgentSettings()
+        {
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                Type[] types;
+                try { types = assembly.GetTypes(); }
+                catch (ReflectionTypeLoadException ex) { types = ex.Types; }
+                if (types == null) continue;
+                foreach (var type in types)
+                {
+                    if (type != null
+                        && type.Name == "RuntimeSettings"
+                        && type.Namespace != null
+                        && type.Namespace.IndexOf("DevAgent", StringComparison.Ordinal) >= 0)
+                        return type;
+                }
+            }
+            return null;
         }
     }
 }

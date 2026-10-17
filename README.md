@@ -69,9 +69,9 @@ Open `unity/` in that editor with Android Build Support (SDK, NDK, OpenJDK). Pac
 | Scripting backend | IL2CPP, ARM64 only |
 | Min / target API | 32 / 34 (Android 14). New Horizon apps created after 1 March 2026 must target API 34. |
 | Graphics | Vulkan only, linear color space, multithreaded rendering |
-| XR | OpenXR loader, Meta Quest Support, Single Pass Instanced (Vulkan multiview), symmetric projection |
+| XR | OpenXR loader, Meta Quest Support, Oculus Touch / Touch Pro / Touch Plus profiles, Single Pass Instanced (Vulkan multiview). Symmetric projection is off so Quest 1 in the default device list cannot fail validation. Latency optimization is Prioritize Input Polling. |
 | Devices | Quest 2, Quest Pro, Quest 3, Quest 3S |
-| Activity | `UnityPlayerActivity` (not Game Activity) |
+| Activity | Game Activity (`AndroidApplicationEntry.GameActivity` only) |
 | Permissions | Internet, for entitlements and leaderboards |
 
 The release scene is generated into `Assets/Scenes/Main.unity` the first time the editor or the build script runs, because the scripts shipped without a scene. That scene wires the background track plus the flap, bonk, game-over, "Fight", "Uh ooh", and score-announcer clips under `Assets/Audio`. OpenXR assets under `Assets/XR/` and `Packages/packages-lock.json` are also written on that first import. Commit those after a successful editor open so later builds stay reproducible. The build writes the Meta Platform mobile app id and expects a leaderboard whose API name is `floppy_highscores`.
