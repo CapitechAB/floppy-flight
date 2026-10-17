@@ -5,10 +5,13 @@ namespace FloppyFlight.Obstacles
 {
     public class PipeSpawner : MonoBehaviour
     {
+        public const float FirstPipeZ = -18f;
+        public const float PipeSpacingZ = 20f;
+
         [Header("Pool Settings")]
         [SerializeField] private GameObject pipePrefab;
         [SerializeField] private int poolSize = 10;
-        [SerializeField] private float spacingZ = 20.0f;
+        [SerializeField] private float spacingZ = PipeSpacingZ;
         [SerializeField] private float minGapY = 3.5f;
         [SerializeField] private float maxGapY = 8.0f;
 

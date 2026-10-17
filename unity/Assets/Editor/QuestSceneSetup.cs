@@ -28,11 +28,13 @@ namespace FloppyFlight.Editor
         public static void EnsureMainScene()
         {
             EnsureFolders();
+            var birdPrefab = BirdPrefabSetup.EnsurePrefab();
             if (File.Exists(Path.Combine(Application.dataPath, "Scenes/Main.unity")))
             {
                 var existing = AssetDatabase.LoadAssetAtPath<SceneAsset>(ScenePath);
                 if (existing != null)
                 {
+                    EnsureBirdSpawner(birdPrefab);
                     EditorBuildSettings.scenes = new[]
                     {
                         new EditorBuildSettingsScene(ScenePath, true)
@@ -46,7 +48,7 @@ namespace FloppyFlight.Editor
             CreateEnvironment(materials);
             var pipePrefab = CreatePipePrefab(materials);
             var flight = CreateFlightRig(materials);
-            CreateGameSystems(flight, pipePrefab);
+            CreateGameSystems(flight, pipePrefab, birdPrefab);
             CreateHud(flight.transform);
 
             EditorSceneManager.SaveScene(scene, ScenePath);
@@ -63,6 +65,9 @@ namespace FloppyFlight.Editor
             CreateFolder("Assets", "Scenes");
             CreateFolder("Assets", "Prefabs");
             CreateFolder("Assets", "Materials");
+            CreateFolder("Assets", "Art");
+            CreateFolder("Assets/Art", "Bird");
+            CreateFolder("Assets/Art/Bird", "Materials");
         }
 
         static void CreateFolder(string parent, string name)
@@ -517,11 +522,46 @@ namespace FloppyFlight.Editor
             return wing;
         }
 
-        static void CreateGameSystems(GameObject flightRig, GameObject pipePrefab)
+        static void EnsureBirdSpawner(GameObject birdPrefab)
+        {
+            if (birdPrefab == null) return;
+
+            var guid = AssetDatabase.AssetPathToGUID(BirdPrefabSetup.PrefabPath);
+            var sceneFile = Path.Combine(Application.dataPath, "Scenes/Main.unity");
+            if (!string.IsNullOrEmpty(guid) && File.ReadAllText(sceneFile).Contains(guid))
+                return;
+
+            var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            var game = UnityEngine.Object.FindAnyObjectByType<GameManager>();
+            if (game == null)
+            {
+                Debug.LogWarning("[FloppyFlight] Main scene has no GameManager; bird spawner was not added.");
+                return;
+            }
+
+            var spawner = game.GetComponent<BirdSpawner>();
+            if (spawner == null) spawner = game.gameObject.AddComponent<BirdSpawner>();
+
+            var spawnerSo = new SerializedObject(spawner);
+            SetRef(spawnerSo, "birdPrefab", birdPrefab);
+            spawnerSo.ApplyModifiedPropertiesWithoutUndo();
+
+            var gameSo = new SerializedObject(game);
+            SetRef(gameSo, "birdSpawner", spawner);
+            gameSo.ApplyModifiedPropertiesWithoutUndo();
+
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene);
+            AssetDatabase.SaveAssets();
+            Debug.Log("[FloppyFlight] Added bird spawner to " + ScenePath);
+        }
+
+        static void CreateGameSystems(GameObject flightRig, GameObject pipePrefab, GameObject birdPrefab)
         {
             var systems = new GameObject("GameSystems");
             var game = systems.AddComponent<GameManager>();
             var spawner = systems.AddComponent<PipeSpawner>();
+            var birds = systems.AddComponent<BirdSpawner>();
             systems.AddComponent<MetaPlatformManager>();
             var avatar = flightRig.GetComponent<BirdAvatarController>();
             var flight = flightRig.GetComponent<FlapFlightController>();
@@ -547,6 +587,7 @@ namespace FloppyFlight.Editor
             var gameSo = new SerializedObject(game);
             SetRef(gameSo, "flightController", flight);
             SetRef(gameSo, "pipeSpawner", spawner);
+            SetRef(gameSo, "birdSpawner", birds);
             SetRef(gameSo, "avatarController", avatar);
             SetRef(gameSo, "audioSource", sfx);
             SetRef(gameSo, "bgmAudioSource", bgm);
@@ -568,6 +609,13 @@ namespace FloppyFlight.Editor
             var spawnerSo = new SerializedObject(spawner);
             SetRef(spawnerSo, "pipePrefab", pipePrefab);
             spawnerSo.ApplyModifiedPropertiesWithoutUndo();
+
+            if (birdPrefab != null)
+            {
+                var birdSo = new SerializedObject(birds);
+                SetRef(birdSo, "birdPrefab", birdPrefab);
+                birdSo.ApplyModifiedPropertiesWithoutUndo();
+            }
         }
 
         static void CreateHud(Transform flightRoot)
