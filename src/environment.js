@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import cloudHappyUrl from './assets/cloud_happy.png';
 import cloudSmileUrl from './assets/cloud_smile.png';
+import grassTuft1Url from './assets/grass_tuft_1.png';
+import grassTuft2Url from './assets/grass_tuft_2.png';
+import grassTuftFlowerUrl from './assets/grass_tuft_flower.png';
 
 export class Environment {
   constructor(scene) {
@@ -9,13 +12,18 @@ export class Environment {
     this.islands = [];
     this.windmills = [];
     this.bgBirds = [];
+    this.grassTufts = [];
+    this.elapsedTime = 0;
     this.leafParticles = null;
     this.sparkleParticles = null;
     this.sunRays = null;
+    this.runwayTexture = null;
+    this.meadowTexture = null;
 
     this.createSkyDome();
     this.createSunAndLighting();
     this.createGround();
+    this.createGrassTufts();
     this.createFloatingIslands();
     this.createSmilingClouds();
     this.createBackgroundBirds();
@@ -42,7 +50,7 @@ export class Environment {
     skyTex.magFilter = THREE.LinearFilter;
     skyTex.minFilter = THREE.LinearFilter;
 
-    const skyGeom = new THREE.SphereGeometry(220, 32, 24);
+    const skyGeom = new THREE.SphereGeometry(220, 64, 32);
     const skyMat = new THREE.MeshBasicMaterial({
       map: skyTex,
       side: THREE.BackSide,
@@ -112,57 +120,193 @@ export class Environment {
   createGround() {
     const groundGroup = new THREE.Group();
 
-    // Cheerful stepped grass pattern with border trim
-    const canvas = document.createElement('canvas');
-    canvas.width = 128;
-    canvas.height = 128;
-    const ctx = canvas.getContext('2d');
+    // 1. Expansive Meadow Ground (320m wide x 440m deep)
+    // Completely eliminates edge clipping and covers the horizon on all sides
+    const meadowCanvas = document.createElement('canvas');
+    meadowCanvas.width = 128;
+    meadowCanvas.height = 128;
+    const mctx = meadowCanvas.getContext('2d');
 
-    // Lime/emerald green base
-    ctx.fillStyle = '#78e08f';
-    ctx.fillRect(0, 0, 128, 128);
+    // Vibrant cartoon emerald green base
+    mctx.fillStyle = '#68d374';
+    mctx.fillRect(0, 0, 128, 128);
 
-    // Checker pattern
-    ctx.fillStyle = '#38ada9';
-    ctx.fillRect(0, 0, 64, 64);
-    ctx.fillRect(64, 64, 64, 64);
+    // Subtle checkered shade variance
+    mctx.fillStyle = '#55c062';
+    mctx.fillRect(0, 0, 64, 64);
+    mctx.fillRect(64, 64, 64, 64);
 
-    // Golden accent border
-    ctx.strokeStyle = '#fad390';
-    ctx.lineWidth = 6;
-    ctx.strokeRect(0, 0, 128, 128);
+    // Micro grass flecks for soft organic texture
+    mctx.fillStyle = '#7eed8b';
+    mctx.fillRect(16, 16, 8, 8);
+    mctx.fillRect(80, 80, 8, 8);
+    mctx.fillRect(32, 96, 6, 6);
+    mctx.fillRect(96, 32, 6, 6);
 
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(10, 120);
+    const meadowTex = new THREE.CanvasTexture(meadowCanvas);
+    meadowTex.wrapS = THREE.RepeatWrapping;
+    meadowTex.wrapT = THREE.RepeatWrapping;
+    meadowTex.repeat.set(40, 55);
+    this.meadowTexture = meadowTex;
 
-    const groundGeom = new THREE.PlaneGeometry(40, 360);
-    groundGeom.rotateX(-Math.PI / 2);
+    const meadowGeom = new THREE.PlaneGeometry(320, 440);
+    meadowGeom.rotateX(-Math.PI / 2);
 
-    const groundMat = new THREE.MeshStandardMaterial({
-      map: texture,
-      roughness: 0.75,
+    const meadowMat = new THREE.MeshStandardMaterial({
+      map: meadowTex,
+      roughness: 0.82,
       metalness: 0.05
     });
 
-    this.groundMesh = new THREE.Mesh(groundGeom, groundMat);
-    this.groundMesh.position.set(0, 0, -100);
-    this.groundMesh.receiveShadow = true;
-    groundGroup.add(this.groundMesh);
+    this.meadowMesh = new THREE.Mesh(meadowGeom, meadowMat);
+    this.meadowMesh.position.set(0, 0, -120);
+    this.meadowMesh.receiveShadow = true;
+    groundGroup.add(this.meadowMesh);
 
-    // Golden-brown soil base
-    const soilGeom = new THREE.BoxGeometry(40, 12, 360);
-    const soilMat = new THREE.MeshStandardMaterial({
-      color: 0xe58e26,
-      roughness: 0.9
+    // 2. Central Flight Runway (22m wide x 440m deep)
+    // Stylized path with vibrant checkerboard and golden accent border
+    const runwayCanvas = document.createElement('canvas');
+    runwayCanvas.width = 128;
+    runwayCanvas.height = 128;
+    const rctx = runwayCanvas.getContext('2d');
+
+    // Lime/emerald green base
+    rctx.fillStyle = '#78e08f';
+    rctx.fillRect(0, 0, 128, 128);
+
+    // Checker pattern
+    rctx.fillStyle = '#38ada9';
+    rctx.fillRect(0, 0, 64, 64);
+    rctx.fillRect(64, 64, 64, 64);
+
+    // Golden accent border
+    rctx.strokeStyle = '#fad390';
+    rctx.lineWidth = 6;
+    rctx.strokeRect(0, 0, 128, 128);
+
+    const runwayTex = new THREE.CanvasTexture(runwayCanvas);
+    runwayTex.wrapS = THREE.RepeatWrapping;
+    runwayTex.wrapT = THREE.RepeatWrapping;
+    runwayTex.repeat.set(4, 110);
+    this.runwayTexture = runwayTex;
+
+    const runwayGeom = new THREE.PlaneGeometry(22, 440);
+    runwayGeom.rotateX(-Math.PI / 2);
+
+    const runwayMat = new THREE.MeshStandardMaterial({
+      map: runwayTex,
+      roughness: 0.72,
+      metalness: 0.05,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1
     });
-    const soilMesh = new THREE.Mesh(soilGeom, soilMat);
-    soilMesh.position.set(0, -6.05, -100);
-    groundGroup.add(soilMesh);
+
+    this.runwayMesh = new THREE.Mesh(runwayGeom, runwayMat);
+    this.runwayMesh.position.set(0, 0.005, -120);
+    this.runwayMesh.receiveShadow = true;
+    groundGroup.add(this.runwayMesh);
+
+    // 3. Golden Curbs along runway edges for crisp 3D definition
+    const curbMat = new THREE.MeshStandardMaterial({
+      color: 0xfad390,
+      roughness: 0.4,
+      metalness: 0.2
+    });
+    const curbGeom = new THREE.BoxGeometry(0.35, 0.06, 440);
+
+    const leftCurb = new THREE.Mesh(curbGeom, curbMat);
+    leftCurb.position.set(-11.0, 0.03, -120);
+    leftCurb.receiveShadow = true;
+    groundGroup.add(leftCurb);
+
+    const rightCurb = new THREE.Mesh(curbGeom, curbMat);
+    rightCurb.position.set(11.0, 0.03, -120);
+    rightCurb.receiveShadow = true;
+    groundGroup.add(rightCurb);
 
     this.scene.add(groundGroup);
     this.groundGroup = groundGroup;
+  }
+
+  createGrassTufts() {
+    const loader = new THREE.TextureLoader();
+
+    const tuft1Tex = loader.load(grassTuft1Url);
+    tuft1Tex.magFilter = THREE.NearestFilter;
+    tuft1Tex.minFilter = THREE.NearestFilter;
+    tuft1Tex.colorSpace = THREE.SRGBColorSpace;
+
+    const tuft2Tex = loader.load(grassTuft2Url);
+    tuft2Tex.magFilter = THREE.NearestFilter;
+    tuft2Tex.minFilter = THREE.NearestFilter;
+    tuft2Tex.colorSpace = THREE.SRGBColorSpace;
+
+    const tuftFlowerTex = loader.load(grassTuftFlowerUrl);
+    tuftFlowerTex.magFilter = THREE.NearestFilter;
+    tuftFlowerTex.minFilter = THREE.NearestFilter;
+    tuftFlowerTex.colorSpace = THREE.SRGBColorSpace;
+
+    const mat1 = new THREE.SpriteMaterial({ map: tuft1Tex, transparent: true, depthWrite: false });
+    const mat2 = new THREE.SpriteMaterial({ map: tuft2Tex, transparent: true, depthWrite: false });
+    const matFlower = new THREE.SpriteMaterial({ map: tuftFlowerTex, transparent: true, depthWrite: false });
+
+    // 72 charming grass tuft sprites along the runway and meadows
+    const tuftCount = 72;
+    for (let i = 0; i < tuftCount; i++) {
+      let mat;
+      let aspect;
+      const typeRand = Math.random();
+      if (typeRand < 0.40) {
+        mat = mat1.clone();
+        aspect = 32 / 24;
+      } else if (typeRand < 0.72) {
+        mat = mat2.clone();
+        aspect = 36 / 24;
+      } else {
+        mat = matFlower.clone();
+        aspect = 32 / 24;
+      }
+
+      const sprite = new THREE.Sprite(mat);
+      // Pivot at bottom center so the base sits directly on the ground plane (y = 0)
+      sprite.center.set(0.5, 0.0);
+
+      const baseScale = 0.65 + Math.random() * 0.45; // 0.65m to 1.1m width
+      const flip = Math.random() > 0.5 ? 1 : -1;
+      sprite.scale.set(baseScale * aspect * flip, baseScale, 1.0);
+
+      // Distribute:
+      // Zone 1 (30%): Runway borders (x ~ ±10.5 to ±12.5)
+      // Zone 2 (35%): Clustered around pipe columns (x ~ ±1.8 to ±3.8)
+      // Zone 3 (35%): Flanking meadows (x ~ ±13.5 to ±36.0)
+      let x;
+      const zoneRand = Math.random();
+      const side = Math.random() > 0.5 ? 1 : -1;
+      if (zoneRand < 0.30) {
+        x = side * (10.5 + Math.random() * 2.2);
+      } else if (zoneRand < 0.65) {
+        x = side * (1.8 + Math.random() * 2.0);
+      } else {
+        x = side * (13.5 + Math.random() * 22.0);
+      }
+
+      const y = 0.01;
+      const z = -4 - Math.random() * 160;
+
+      sprite.position.set(x, y, z);
+      sprite.userData = {
+        baseY: y,
+        phase: Math.random() * Math.PI * 2,
+        swaySpeed: 1.8 + Math.random() * 1.5,
+        swayAmp: 0.04 + Math.random() * 0.04,
+        zoneRand,
+        side
+      };
+
+      this.scene.add(sprite);
+      this.grassTufts.push(sprite);
+    }
   }
 
   createFloatingIslands() {
@@ -422,6 +566,8 @@ export class Environment {
   }
 
   update(delta, playerZ) {
+    this.elapsedTime += delta;
+
     // Sky dome stays centered around player
     if (this.skyDome) {
       this.skyDome.position.z = playerZ - 30;
@@ -435,9 +581,26 @@ export class Environment {
       if (this.sunMesh) this.sunMesh.position.z = playerZ - 172;
     }
 
-    // Scroll ground seamlessly with player
+    // Smooth continuous ground scrolling (zero snapping, zero popping)
     if (this.groundGroup) {
-      this.groundGroup.position.z = Math.floor(playerZ / 10) * 10;
+      this.groundGroup.position.z = playerZ;
+    }
+    if (this.runwayTexture) {
+      this.runwayTexture.offset.y = (-playerZ / 4.0) % 1.0;
+    }
+    if (this.meadowTexture) {
+      this.meadowTexture.offset.y = (-playerZ / 8.0) % 1.0;
+    }
+
+    // Animate grass tufts with gentle wind sway & recycle forward
+    for (let i = 0; i < this.grassTufts.length; i++) {
+      const tuft = this.grassTufts[i];
+      if (tuft.material) {
+        tuft.material.rotation = Math.sin(this.elapsedTime * tuft.userData.swaySpeed + tuft.userData.phase) * tuft.userData.swayAmp;
+      }
+      if (tuft.position.z > playerZ + 15) {
+        tuft.position.z = playerZ - 140 - Math.random() * 35;
+      }
     }
 
     // Rotate windmill blades on islands & recycle islands

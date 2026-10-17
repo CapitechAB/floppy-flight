@@ -103,7 +103,7 @@ export class BirdAvatar {
       const length = 0.36 - i * 0.04;
       const width = 0.09 - i * 0.008;
 
-      const featherGeom = new THREE.ConeGeometry(width, length, 4);
+      const featherGeom = new THREE.ConeGeometry(width, length, 12);
       featherGeom.rotateZ(isLeft ? Math.PI / 2 : -Math.PI / 2);
       featherGeom.scale(1.2, 0.28, 1.0);
 
@@ -162,10 +162,10 @@ export class BirdAvatar {
     // Desktop camera preview wings
     this.camWingLeft = this.createWingMesh(true);
     this.camWingRight = this.createWingMesh(false);
-    this.camWingLeft.position.set(-0.38, -0.14, -0.46);
-    this.camWingLeft.scale.set(1.35, 1.35, 1.35);
-    this.camWingRight.position.set(0.38, -0.14, -0.46);
-    this.camWingRight.scale.set(1.35, 1.35, 1.35);
+    this.camWingLeft.position.set(-0.40, -0.05, -0.46);
+    this.camWingLeft.scale.set(1.25, 1.25, 1.25);
+    this.camWingRight.position.set(0.40, -0.05, -0.46);
+    this.camWingRight.scale.set(1.25, 1.25, 1.25);
 
     this.camera.add(this.camWingLeft);
     this.camera.add(this.camWingRight);
