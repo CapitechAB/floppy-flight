@@ -697,7 +697,9 @@ namespace FloppyFlight.Editor
                     }
 
                     var stored = entry.Length == entry.CompressedLength;
-                    var created = output.CreateEntry(entry.FullName, stored ? CompressionLevel.NoCompression : CompressionLevel.Optimal);
+                    var created = output.CreateEntry(
+                        entry.FullName,
+                        stored ? System.IO.Compression.CompressionLevel.NoCompression : System.IO.Compression.CompressionLevel.Optimal);
                     using (var source = entry.Open())
                     using (var destination = created.Open())
                         source.CopyTo(destination);
