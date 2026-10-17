@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using UnityEditor;
+using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEditor.XR.Management;
 using UnityEditor.XR.Management.Metadata;
 using UnityEditor.XR.OpenXR.Features;
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEngine.XR.OpenXR;
 using UnityEngine.XR.OpenXR.Features.MetaQuestSupport;
 
@@ -24,8 +26,6 @@ namespace FloppyFlight.Editor
         public const string ProductName = "Floppy Flight";
         public const string CompanyName = "Capitech AB";
         public const string DefaultVersion = "1.0.0";
-        public const int MinSdk = 32;
-        public const int TargetSdk = 34;
         const string OpenXrLoader = "UnityEngine.XR.OpenXR.OpenXRLoader";
 
         static int s_bootstrapRetries;
@@ -155,28 +155,29 @@ namespace FloppyFlight.Editor
 
         public static void ApplyPlayerSettings(string version, int versionCode)
         {
+            var android = NamedBuildTarget.Android;
             PlayerSettings.companyName = CompanyName;
             PlayerSettings.productName = ProductName;
             PlayerSettings.bundleVersion = version;
-            PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, PackageName);
+            PlayerSettings.SetApplicationIdentifier(android, PackageName);
             PlayerSettings.Android.bundleVersionCode = Math.Max(1, versionCode);
             PlayerSettings.colorSpace = ColorSpace.Linear;
             PlayerSettings.MTRendering = true;
             PlayerSettings.stripEngineCode = false;
-            PlayerSettings.SetMobileMTRendering(BuildTargetGroup.Android, true);
+            PlayerSettings.SetMobileMTRendering(android, true);
             PlayerSettings.defaultInterfaceOrientation = UIOrientation.LandscapeLeft;
             PlayerSettings.allowedAutorotateToPortrait = false;
             PlayerSettings.allowedAutorotateToPortraitUpsideDown = false;
             PlayerSettings.allowedAutorotateToLandscapeLeft = true;
             PlayerSettings.allowedAutorotateToLandscapeRight = true;
 
-            PlayerSettings.SetScriptingBackend(BuildTargetGroup.Android, ScriptingImplementation.IL2CPP);
-            PlayerSettings.SetApiCompatibilityLevel(BuildTargetGroup.Android, ApiCompatibilityLevel.NET_Standard_2_1);
-            PlayerSettings.SetManagedStrippingLevel(BuildTargetGroup.Android, ManagedStrippingLevel.Low);
-            PlayerSettings.SetIl2CppCompilerConfiguration(BuildTargetGroup.Android, Il2CppCompilerConfiguration.Release);
+            PlayerSettings.SetScriptingBackend(android, ScriptingImplementation.IL2CPP);
+            PlayerSettings.SetApiCompatibilityLevel(android, ApiCompatibilityLevel.NET_Standard);
+            PlayerSettings.SetManagedStrippingLevel(android, ManagedStrippingLevel.Low);
+            PlayerSettings.SetIl2CppCompilerConfiguration(android, Il2CppCompilerConfiguration.Release);
 
-            PlayerSettings.Android.minSdkVersion = (AndroidSdkVersions)MinSdk;
-            PlayerSettings.Android.targetSdkVersion = (AndroidSdkVersions)TargetSdk;
+            PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel32;
+            PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevel34;
             PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
             PlayerSettings.Android.preferredInstallLocation = AndroidPreferredInstallLocation.Auto;
             PlayerSettings.Android.forceInternetPermission = true;
