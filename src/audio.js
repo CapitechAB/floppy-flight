@@ -5,10 +5,7 @@ import flap3Url from './assets/sfx/flap_3.mp3';
 import bonkUrl from './assets/sfx/bonk.mp3';
 import gameoverUrl from './assets/sfx/gameover.mp3';
 
-// Eager load all bird announcer voice clips
-const voiceModules = import.meta.glob('./assets/voice/*.mp3', { eager: true, import: 'default' });
-
-// Web Audio API Procedural Synthesizer + Audio Buffer Sampler + BGM + Announcer
+// Web Audio API Procedural Synthesizer + Audio Buffer Sampler + BGM
 class SoundFX {
   constructor() {
     this.ctx = null;
@@ -39,18 +36,6 @@ class SoundFX {
 
     // Decoded Web Audio Buffers for zero-latency polyphony in VR
     this.buffers = {};
-
-    // Preload Hyped Bird Announcer Voice Clips
-    this.voiceClips = {};
-    for (const [pathKey, url] of Object.entries(voiceModules)) {
-      const match = pathKey.match(/voice_(.*)\.mp3$/);
-      if (match) {
-        const key = match[1];
-        const audio = new Audio(url);
-        audio.preload = 'auto';
-        this.voiceClips[key] = audio;
-      }
-    }
   }
 
   init() {
@@ -290,62 +275,11 @@ class SoundFX {
     } catch (e) {}
   }
 
-  // Mortal Kombat Announcer Voice ("One!", "Two!", "Fight!", "Fatality!", etc.)
-  playAnnouncer(score) {
-    if (this.isMuted) return;
-    this.init();
-
-    let clipKey = `${score}`;
-    if (!this.voiceClips[clipKey]) {
-      const combos = ['combo1', 'combo2', 'combo3', `${((score - 1) % 10) + 1}`];
-      clipKey = combos[Math.floor(Math.random() * combos.length)];
-    }
-
-    const audio = this.voiceClips[clipKey];
-    if (audio) {
-      this.setBGMVolume(0.18);
-      const isMilestone = (score % 5 === 0) || score > 20;
-      const duckDuration = isMilestone ? 1700 : 1100;
-      setTimeout(() => {
-        if (!this.isGameOver) this.setBGMVolume(0.38);
-      }, duckDuration);
-
-      audio.currentTime = 0;
-      audio.volume = 1.0;
-      audio.play().catch(() => {});
-    }
-  }
-
-  playFight() {
-    if (this.isMuted) return;
-    this.init();
-    const audio = this.voiceClips['fight'];
-    if (audio) {
-      this.setBGMVolume(0.18);
-      setTimeout(() => {
-        if (!this.isGameOver) this.setBGMVolume(0.38);
-      }, 1250);
-      audio.currentTime = 0;
-      audio.volume = 1.0;
-      audio.play().catch(() => {});
-    }
-  }
-
-  playUhOh() {
-    if (this.isMuted) return;
-    this.init();
-    const audio = this.voiceClips['fatality']; // "Uh ooh!"
-    if (audio) {
-      audio.currentTime = 0;
-      audio.volume = 1.0;
-      audio.play().catch(() => {});
-    }
-  }
-
-  // Backwards compatibility alias
-  playFatality() {
-    this.playUhOh();
-  }
+  // Announcer voice removed per user request
+  playAnnouncer(score) {}
+  playFight() {}
+  playUhOh() {}
+  playFatality() {}
 }
 
 export const sound = new SoundFX();

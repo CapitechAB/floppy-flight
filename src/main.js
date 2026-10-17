@@ -139,7 +139,6 @@ class FloppyFlightGame {
     this.state = 'PLAYING';
     sound.isGameOver = false;
     sound.startBGM();
-    sound.playFight();
     this.ui.hideReady();
   }
 
@@ -196,9 +195,6 @@ class FloppyFlightGame {
     setTimeout(() => {
       sound.playGameOver();
     }, 240);
-    setTimeout(() => {
-      sound.playUhOh();
-    }, 1750);
 
     this.triggerHaptic(1.0, 250);
     this.ui.showGameOver(this.playerRig.position);
@@ -275,7 +271,6 @@ class FloppyFlightGame {
         this.score++;
         this.forwardSpeed = this.baseForwardSpeed + Math.min(this.score * 0.1, 4.0);
         sound.playScore();
-        sound.playAnnouncer(this.score);
         this.triggerHaptic(0.4, 60);
         this.ui.updateScore(this.score);
       });
