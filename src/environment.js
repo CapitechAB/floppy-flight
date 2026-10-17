@@ -1,6 +1,5 @@
 import * as THREE from 'three';
-import cloudHappyUrl from './assets/cloud_happy.png';
-import cloudSmileUrl from './assets/cloud_smile.png';
+import { createCloudGeometries, createCloudMaterial } from './cloudMesh.js';
 import grassTuft1Url from './assets/grass_tuft_1.png';
 import grassTuft2Url from './assets/grass_tuft_2.png';
 import grassTuftFlowerUrl from './assets/grass_tuft_flower.png';
@@ -779,51 +778,28 @@ export class Environment {
   }
 
   createSmilingClouds() {
-    const loader = new THREE.TextureLoader();
+    const geometries = createCloudGeometries();
+    const material = createCloudMaterial();
 
-    const happyTex = loader.load(cloudHappyUrl);
-    happyTex.magFilter = THREE.NearestFilter;
-    happyTex.minFilter = THREE.NearestFilter;
-    happyTex.colorSpace = THREE.SRGBColorSpace;
-
-    const smileTex = loader.load(cloudSmileUrl);
-    smileTex.magFilter = THREE.NearestFilter;
-    smileTex.minFilter = THREE.NearestFilter;
-    smileTex.colorSpace = THREE.SRGBColorSpace;
-
-    const happyMat = new THREE.SpriteMaterial({
-      map: happyTex,
-      transparent: true,
-      depthWrite: false
-    });
-
-    const smileMat = new THREE.SpriteMaterial({
-      map: smileTex,
-      transparent: true,
-      depthWrite: false
-    });
-
-    // Create 32 charming smiling pixel-art cloud sprites
+    // Same 32 flank clouds as the old sprites: far ones larger and slower.
     const cloudCount = 32;
     for (let i = 0; i < cloudCount; i++) {
-      const isHappy = (i % 2 === 0);
-      const mat = isHappy ? happyMat.clone() : smileMat.clone();
-      const sprite = new THREE.Sprite(mat);
-
-      const aspect = isHappy ? 1.62 : 1.56;
       const isFar = (i % 3 === 0);
       const baseScale = isFar ? (6.0 + Math.random() * 3.5) : (3.0 + Math.random() * 2.6);
-      const flip = (Math.random() > 0.4) ? 1 : -1;
-      sprite.scale.set(baseScale * aspect * flip, baseScale, 1.0);
+      const cloud = new THREE.Mesh(geometries[i % geometries.length], material);
+      cloud.scale.setScalar(baseScale);
+      cloud.castShadow = false;
+      cloud.receiveShadow = false;
 
-      // Flank distribution: frame the sky beautifully on both left and right flanks
       const side = (i % 2 === 0) ? -1 : 1;
       const x = side * (14 + Math.random() * (isFar ? 55 : 28));
       const y = (isFar ? 10.5 : 7.0) + Math.random() * (isFar ? 14.0 : 9.5);
       const z = -20 - Math.random() * 240;
 
-      sprite.position.set(x, y, z);
-      sprite.userData = {
+      cloud.position.set(x, y, z);
+      // Local +Z is the face. Point it inward so the lane sees the smile.
+      cloud.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;
+      cloud.userData = {
         baseY: y,
         speed: (isFar ? 0.35 : 0.75) + Math.random() * 0.5,
         bobPhase: Math.random() * Math.PI * 2,
@@ -833,8 +809,8 @@ export class Environment {
         side
       };
 
-      this.scene.add(sprite);
-      this.clouds.push(sprite);
+      this.scene.add(cloud);
+      this.clouds.push(cloud);
     }
   }
 
@@ -1163,8 +1139,10 @@ export class Environment {
       if (cloud.position.z > playerZ + 25) {
         const isFar = cloud.userData.isFar;
         const side = (Math.random() > 0.5) ? 1 : -1;
+        cloud.userData.side = side;
         cloud.position.z = playerZ - 200 - Math.random() * 60;
         cloud.position.x = side * (14 + Math.random() * (isFar ? 55 : 28));
+        cloud.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;
       }
     }
 

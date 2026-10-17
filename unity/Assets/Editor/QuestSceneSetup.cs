@@ -71,6 +71,7 @@ namespace FloppyFlight.Editor
             CreateFolder("Assets/Art/Bird", "Materials");
             CreateFolder("Assets/Art/Bird", "Purple");
             CreateFolder("Assets/Art/Bird/Purple", "Materials");
+            CreateFolder("Assets/Art", "Clouds");
         }
 
         static void CreateFolder(string parent, string name)
@@ -110,7 +111,7 @@ namespace FloppyFlight.Editor
                 WingCyan = Mat("Assets/Materials/WingCyan.mat", new Color(0.494f, 0.839f, 0.875f), 0.3f, 0.12f, new Color(0.133f, 0.651f, 0.702f) * 0.35f),
                 Island = Mat("Assets/Materials/Island.mat", new Color(0.45f, 0.32f, 0.18f), 0.55f, 0f),
                 Grass = Mat("Assets/Materials/Grass.mat", new Color(0.30f, 0.72f, 0.22f), 0.45f, 0f),
-                Cloud = Mat("Assets/Materials/Cloud.mat", Color.white, 0.6f, 0f),
+                Cloud = CloudMaterial(),
                 Sun = Mat("Assets/Materials/Sun.mat", new Color(1f, 0.96f, 0.72f), 0.2f, 0f, new Color(1f, 0.85f, 0.4f)),
                 Ground = Mat("Assets/Materials/Ground.mat", new Color(0.18f, 0.62f, 0.22f), 0.5f, 0f)
             };
@@ -190,9 +191,9 @@ namespace FloppyFlight.Editor
             CreateIsland(materials, new Vector3(-14f, 3.2f, -35f), 4.5f);
             CreateIsland(materials, new Vector3(16f, 4.5f, -58f), 6f);
             CreateIsland(materials, new Vector3(-18f, 2.4f, -78f), 5f);
-            CreateCloud(materials, new Vector3(-8f, 14f, -30f), 2.2f);
-            CreateCloud(materials, new Vector3(10f, 16f, -48f), 2.8f);
-            CreateCloud(materials, new Vector3(-4f, 18f, -70f), 3.2f);
+            CreateCloud(materials, new Vector3(-8f, 14f, -30f), 2.2f, 0);
+            CreateCloud(materials, new Vector3(10f, 16f, -48f), 2.8f, 1);
+            CreateCloud(materials, new Vector3(-4f, 18f, -70f), 3.2f, 2);
             CreateWindmill(materials, new Vector3(16f, 7.2f, -58f));
         }
 
@@ -213,19 +214,46 @@ namespace FloppyFlight.Editor
             UnityEngine.Object.DestroyImmediate(top.GetComponent<Collider>());
         }
 
-        static void CreateCloud(Materials materials, Vector3 position, float scale)
+        static Material CloudMaterial()
+        {
+            const string path = "Assets/Materials/Cloud.mat";
+            var shader = Shader.Find("FloppyFlight/Cloud");
+            var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (existing != null)
+            {
+                if (shader != null && existing.shader != shader)
+                {
+                    existing.shader = shader;
+                    EditorUtility.SetDirty(existing);
+                }
+                return existing;
+            }
+
+            if (shader == null)
+                throw new InvalidOperationException("FloppyFlight/Cloud shader was not found.");
+
+            var material = new Material(shader) { name = "Cloud" };
+            AssetDatabase.CreateAsset(material, path);
+            return material;
+        }
+
+        static void CreateCloud(Materials materials, Vector3 position, float scale, int variant)
         {
             var cloud = new GameObject("Cloud");
             cloud.transform.position = position;
-            for (var i = 0; i < 3; i++)
-            {
-                var puff = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                puff.transform.SetParent(cloud.transform, false);
-                puff.transform.localPosition = new Vector3((i - 1) * scale * 0.55f, (i == 1 ? 0.25f : 0f) * scale, 0f);
-                puff.transform.localScale = Vector3.one * (scale * (i == 1 ? 1f : 0.75f));
-                puff.GetComponent<Renderer>().sharedMaterial = materials.Cloud;
-                UnityEngine.Object.DestroyImmediate(puff.GetComponent<Collider>());
-            }
+            cloud.transform.localScale = Vector3.one * scale;
+            // The mesh face is +Z. Turn it toward the lane.
+            var yaw = position.x >= 0f ? -90f : 90f;
+            cloud.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+
+            var filter = cloud.AddComponent<MeshFilter>();
+            filter.sharedMesh = CloudMeshBuilder.GetOrCreate(variant);
+            var renderer = cloud.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = materials.Cloud;
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+            renderer.lightProbeUsage = LightProbeUsage.Off;
+            renderer.reflectionProbeUsage = ReflectionProbeUsage.Off;
         }
 
         static void CreateWindmill(Materials materials, Vector3 position)
